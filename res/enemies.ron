@@ -1,0 +1,8 @@
+[
+	Enemy(
+		name: "Bat",
+		health: 5,
+		damage_value: 1,
+		damage_element: None
+	)
+]

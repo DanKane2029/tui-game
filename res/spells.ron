@@ -1,0 +1,23 @@
+[
+	Spell(
+		name: "Fireball",
+		damage_value: 1,
+		damage_element: Flame,
+		block_value: 0,
+		block_element: None,
+	),
+	Spell(
+		name: "Lightning Bolt",
+		damage_value: 1,
+		damage_element: Shock,
+		block_value: 0,
+		block_element: None,
+	),
+	Spell(
+		name: "Water Whip",
+		damage_value: 1,
+		damage_element: Water,
+		block_value: 0,
+		block_element: None,
+	)
+]
