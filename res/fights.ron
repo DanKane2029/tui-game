@@ -1,0 +1,8 @@
+[
+	Fight(
+		player: &Player,
+		enemies: Vec<Enemy>,
+		turn: Player,
+		turn_count: 0
+	)
+]

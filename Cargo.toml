@@ -14,3 +14,4 @@ nom = "8.0.0"
 ratatui = "0.29.0"
 ron = "0.10.1"
 serde = { version = "1.0.219", features = ["derive"] }
+tokio = { version = "1.46.1", features = ["sync"] }

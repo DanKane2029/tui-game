@@ -1,34 +1,46 @@
+mod model;
+mod components;
+
+use env_logger;
 use dotenv::dotenv;
 use color_eyre::Result;
-use crossterm::event::{self, Event};
-use ratatui::{DefaultTerminal, Frame};
-use game::{
-    enemies::{get_enemies, Enemy},
-    spell::{get_spells, Spell}
+use ratatui::{init as ratatui_init, DefaultTerminal, Frame};
+use tokio::sync::mpsc::
+
+use components::{
+    App,
+    Component
 };
 
-mod cli;
-mod game;
+use model::{get_input_event, InputEvent};
 
 fn main() -> Result<()> {
-    // dotenv().ok();
-    // env_logger::init();
-    let terminal = ratatui::init();
-    let result = run(terminal);
+    env_logger::init();
+    dotenv().ok();
+    let mut terminal: DefaultTerminal = ratatui_init();
+    let mut app = App::new();
+    let result = run(&mut terminal, &mut app);
     ratatui::restore();
     result
 }
 
-fn run(mut terminal: DefaultTerminal) -> Result<()> {
+fn run(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
     loop {
-        log::debug!("loop");
-        terminal.draw(render)?;
-        if matches!(event::read()?, Event::Key(_)) {
-            break Ok(());
+        app.handle_key_events();
+        app.update();
+        terminal.draw(|frame: &mut Frame| {
+            app.render(frame, frame.area());
+        })?;
+        match get_input_event() {
+            Some(event) => {
+                match event {
+                    InputEvent::Esc => break Ok(()),
+                    _ => ()
+                }
+            },
+            None => (),
         }
+        
     }
 }
 
-fn render(frame: &mut Frame) {
-    frame.render_widget("hello world", frame.area());
-}

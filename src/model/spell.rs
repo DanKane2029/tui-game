@@ -1,7 +1,7 @@
 use serde::{Deserialize};
 use std::{string::ToString, fs::read_to_string};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum Element {
 	None,
 	Flame,
@@ -10,9 +10,10 @@ pub enum Element {
 	Earth,
 	Gust,
 	Ice,
+	Toxic,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum Status {
 	None,
 	Burned,
@@ -20,10 +21,10 @@ pub enum Status {
 	Paralyzed,
 	Poisoned,
 	Sleep,
-
 }
 
-#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Spell {
 	pub name: String,
 	pub damage_value: u8,
@@ -32,12 +33,7 @@ pub struct Spell {
 	pub block_element: Element,
 }
 
-impl ToString for Spell {
-	fn to_string(&self) -> String {
-		self.name.clone()
-	}
-}
-
+#[allow(dead_code)]
 pub fn get_spells() -> Vec<Spell> {
 	let file_read_result = read_to_string("res/spells.ron");
 	if file_read_result.is_ok() {

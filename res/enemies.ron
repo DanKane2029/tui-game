@@ -3,6 +3,18 @@
 		name: "Bat",
 		health: 5,
 		damage_value: 1,
+		damage_element: Gust
+	),
+	Enemy(
+		name: "Goblin",
+		health: 10,
+		damage_value: 2,
 		damage_element: None
+	),
+	Enemy(
+		name: "Spider",
+		health: 5,
+		damage_value: 1,
+		damage_element: Toxic
 	)
 ]

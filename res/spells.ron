@@ -19,5 +19,19 @@
 		damage_element: Water,
 		block_value: 0,
 		block_element: None,
+	),
+	Spell(
+		name: "Ice Blast",
+		damage_value: 1,
+		damage_element: Ice,
+		block_value: 0,
+		block_element: None,
+	),
+	Spell(
+		name: "Breeze Blast",
+		damage_value: 1,
+		damage_element: Gust,
+		block_value: 0,
+		block_element: None,
 	)
 ]
