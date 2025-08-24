@@ -9,8 +9,17 @@ struct Behavior {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 pub struct Enemy {
-	name: String,
-	health: u8,
+	pub name: String,
+	pub health: u8,
+}
+
+impl Enemy {
+	pub fn new(name: String, health: u8) -> Self {
+		Self {
+			name,
+			health
+		}
+	}
 }
 
 pub struct EnemyFactory {

@@ -4,6 +4,7 @@ mod game_manager;
 mod player;
 mod spell;
 mod event;
+pub mod globals;
 
 pub use enemy::{Enemy, EnemyFactory};
 pub use fight::{TurnType, Fight, FightManager};
