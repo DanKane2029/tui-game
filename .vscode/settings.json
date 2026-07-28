@@ -1,0 +1,13 @@
+{
+  // Surface clippy lints inline, matching what `just check` and CI enforce.
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.extraArgs": ["--all-targets", "--all-features"],
+
+  "editor.formatOnSave": true,
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+
+  // Belt and braces alongside .gitattributes: never write CRLF into this repo.
+  "files.eol": "\n"
+}
