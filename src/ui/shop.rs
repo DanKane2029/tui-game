@@ -17,7 +17,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Constraint::Fill(1),
         Constraint::Length(4),
     ])
-    .areas(f.area());
+    .areas(crate::ui::stage(f));
 
     f.render_widget(
         Paragraph::new(Line::from(vec![

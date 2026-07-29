@@ -12,7 +12,7 @@ pub fn render(f: &mut Frame, app: &App) {
     let Some(active) = &app.event else { return };
 
     let [prompt_area, body_area] =
-        Layout::vertical([Constraint::Length(6), Constraint::Fill(1)]).areas(f.area());
+        Layout::vertical([Constraint::Length(6), Constraint::Fill(1)]).areas(crate::ui::stage(f));
 
     f.render_widget(
         Paragraph::new(active.event.prompt.clone())

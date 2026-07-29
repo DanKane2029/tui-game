@@ -30,3 +30,11 @@ jobs:
 
       - name: Build release
         run: cargo build --release
+
+      # The browser build shares all the game code but a different shell, so a
+      # change can compile natively and still break the deploy. Catch it here
+      # rather than on main.
+      - name: Check the web build
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo check --target wasm32-unknown-unknown

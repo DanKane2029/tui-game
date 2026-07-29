@@ -12,7 +12,7 @@ use crate::game::options::{Cycle, OptionField};
 
 pub fn render(f: &mut Frame, app: &App) {
     let [body, footer] =
-        Layout::vertical([Constraint::Length(9), Constraint::Fill(1)]).areas(f.area());
+        Layout::vertical([Constraint::Length(9), Constraint::Fill(1)]).areas(crate::ui::stage(f));
 
     let lines: Vec<Line> = OptionField::ALL
         .iter()
