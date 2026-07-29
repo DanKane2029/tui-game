@@ -13,7 +13,7 @@ jobs:
     name: fmt, clippy, test, build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Reads the channel and components from rust-toolchain.toml, and caches
       # the cargo registry and target dir.
