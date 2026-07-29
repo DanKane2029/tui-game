@@ -10,6 +10,7 @@ pub type NodeId = usize;
 pub enum NodeKind {
     Fight,
     Event,
+    Shop,
     Boss,
 }
 
@@ -19,6 +20,7 @@ impl NodeKind {
         match self {
             NodeKind::Fight => '⚔',
             NodeKind::Event => '?',
+            NodeKind::Shop => '$',
             NodeKind::Boss => '☠',
         }
     }
@@ -27,6 +29,7 @@ impl NodeKind {
         match self {
             NodeKind::Fight => "Fight",
             NodeKind::Event => "Event",
+            NodeKind::Shop => "Shop",
             NodeKind::Boss => "Boss",
         }
     }

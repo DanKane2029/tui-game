@@ -29,10 +29,13 @@ pub fn generate(rows: usize, rng: &mut impl Rng) -> Map {
                 NodeKind::Boss
             } else if row == 0 {
                 NodeKind::Fight
-            } else if rng.random_range(0..100) < 30 {
-                NodeKind::Event
             } else {
-                NodeKind::Fight
+                // Weighted so fights stay the backbone of a run.
+                match rng.random_range(0..100) {
+                    0..22 => NodeKind::Event,
+                    22..34 => NodeKind::Shop,
+                    _ => NodeKind::Fight,
+                }
             };
 
             let id = nodes.len();

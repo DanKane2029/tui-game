@@ -14,7 +14,14 @@ use tui_game::game::content::Content;
 use tui_game::ui;
 
 fn app(seed: u64) -> App {
-    App::new(Content::load().expect("content parses"), seed)
+    let mut app = App::new(Content::load().expect("content parses"), seed);
+    app.start_run_with_seed(seed);
+    app
+}
+
+/// An app sitting on the title screen, before any run has begun.
+fn fresh() -> App {
+    App::new(Content::load().expect("content parses"), 1)
 }
 
 fn frame(app: &App) -> String {
@@ -135,20 +142,47 @@ fn reward_screen() {
     assert_snapshot!(frame(&app));
 }
 
-/// With every slot full, taking a spell asks which one it replaces.
 #[test]
-fn reward_screen_choosing_what_to_replace() {
+fn title_screen() {
+    assert_snapshot!(frame(&fresh()));
+}
+
+#[test]
+fn options_screen() {
+    let mut app = fresh();
+    app.ui.title_cursor = 1;
+    app.apply(Action::Confirm);
+    assert_snapshot!(frame(&app));
+}
+
+#[test]
+fn shop_screen() {
+    use tui_game::game::shop;
+    let mut app = app(7);
+    app.run.player.gold = 80;
+    let stock = shop::generate(
+        &app.content.spells,
+        &app.run.player.spells,
+        1,
+        &mut app.run.rng,
+    );
+    app.shop = Some(stock);
+    app.screen = tui_game::app::Screen::Shop;
+    assert_snapshot!(frame(&app));
+}
+
+/// The modal shown when a spell arrives with no free slot, from either the
+/// reward screen or the shop.
+#[test]
+fn replacement_screen() {
     use tui_game::game::spell::SPELL_SLOTS;
     let mut app = app(7);
     app.apply(Action::Confirm);
     win_fight(&mut app);
-
     let filler = app.run.player.spells[0].clone();
     while app.run.player.spells.len() < SPELL_SLOTS {
         app.run.player.spells.push(filler.clone());
     }
     app.apply(Action::Confirm);
-
-    settle(&mut app);
     assert_snapshot!(frame(&app));
 }

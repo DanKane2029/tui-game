@@ -9,19 +9,54 @@ use crate::game::content::Content;
 use crate::game::encounter;
 use crate::game::event::{MapEvent, apply_outcome};
 use crate::game::map::{NodeId, NodeKind};
+use crate::game::options::{Cycle, OptionField, Options};
 use crate::game::reward::{self, Reward};
 use crate::game::run::Run;
-use crate::game::spell::SPELL_SLOTS;
+use crate::game::shop::{self as shop, BuyError, Shop};
+use crate::game::spell::{SPELL_SLOTS, Spell};
 
 /// A fixed set of screens, so an enum beats dynamic dispatch: the compiler
 /// points at every match that needs updating when a variant is added.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
+    Title,
+    Options,
     Map,
     Combat,
     Reward,
+    Shop,
     Event,
     GameOver,
+}
+
+/// Title-screen menu entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TitleEntry {
+    Start,
+    Options,
+    Quit,
+}
+
+impl TitleEntry {
+    pub const ALL: [TitleEntry; 3] = [TitleEntry::Start, TitleEntry::Options, TitleEntry::Quit];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TitleEntry::Start => "Start a run",
+            TitleEntry::Options => "Options",
+            TitleEntry::Quit => "Quit",
+        }
+    }
+}
+
+/// A spell has been acquired but every slot is full, so the player must choose
+/// what it replaces. Shared by the reward and shop screens.
+#[derive(Debug, Clone)]
+pub struct PendingReplacement {
+    pub incoming: Spell,
+    pub cursor: usize,
+    /// Where to go once this resolves, or is backed out of.
+    pub return_to: Screen,
 }
 
 /// State of the post-fight reward screen.
@@ -31,20 +66,11 @@ pub struct RewardState {
     /// Indexes the offers; the value equal to `offers.len()` is the Skip
     /// button, so Skip is always reachable even when nothing is offered.
     pub cursor: usize,
-    /// Set once a spell is chosen but every slot is full, at which point the
-    /// player picks which spell it replaces.
-    pub replacing: Option<usize>,
-    pub replace_cursor: usize,
 }
 
 impl RewardState {
     pub fn new(reward: Reward) -> Self {
-        Self {
-            reward,
-            cursor: 0,
-            replacing: None,
-            replace_cursor: 0,
-        }
+        Self { reward, cursor: 0 }
     }
 
     /// Offers plus the Skip button.
@@ -111,6 +137,13 @@ pub struct UiState {
     pub focus: Focus,
     pub spell_cursor: usize,
     pub action_cursor: usize,
+    pub title_cursor: usize,
+    pub option_field: OptionField,
+    pub shop_cursor: usize,
+    /// Transient feedback, e.g. a refused purchase.
+    pub message: Option<String>,
+    /// Loop ticks since the last log entry was revealed.
+    pub tick_counter: u8,
 }
 
 impl Default for UiState {
@@ -123,6 +156,11 @@ impl Default for UiState {
             focus: Focus::Spells,
             spell_cursor: 0,
             action_cursor: ACTION_CAST,
+            title_cursor: 0,
+            option_field: OptionField::MapLength,
+            shop_cursor: 0,
+            message: None,
+            tick_counter: 0,
         }
     }
 }
@@ -131,9 +169,12 @@ pub struct App {
     pub content: Content,
     pub run: Run,
     pub screen: Screen,
+    pub options: Options,
     pub combat: Option<Combat>,
     pub event: Option<ActiveEvent>,
     pub reward: Option<RewardState>,
+    pub shop: Option<Shop>,
+    pub pending: Option<PendingReplacement>,
     pub outcome: Option<RunOutcome>,
     pub ui: UiState,
     pub should_quit: bool,
@@ -141,14 +182,17 @@ pub struct App {
 
 impl App {
     pub fn new(content: Content, seed: u64) -> Self {
-        let run = Run::new(&content, seed);
+        let run = Run::new(&content, seed, Options::default());
         Self {
             content,
             run,
-            screen: Screen::Map,
+            screen: Screen::Title,
+            options: Options::default(),
             combat: None,
             event: None,
             reward: None,
+            shop: None,
+            pending: None,
             outcome: None,
             ui: UiState::default(),
             should_quit: false,
@@ -175,11 +219,24 @@ impl App {
         self.run.available()
     }
 
-    /// Reveal pending log entries a beat at a time.
+    /// Reveal pending log entries a beat at a time, at the configured pace.
     pub fn tick(&mut self) {
-        if let Some(combat) = &self.combat
-            && self.ui.revealed < combat.log.len()
-        {
+        let Some(combat) = &self.combat else { return };
+        let pending = combat.log.len();
+        if self.ui.revealed >= pending {
+            self.ui.tick_counter = 0;
+            return;
+        }
+
+        let per_entry = self.options.log_speed.ticks_per_entry();
+        if per_entry == 0 {
+            self.ui.revealed = pending;
+            return;
+        }
+
+        self.ui.tick_counter = self.ui.tick_counter.saturating_add(1);
+        if self.ui.tick_counter >= per_entry {
+            self.ui.tick_counter = 0;
             self.ui.revealed += 1;
         }
     }
@@ -191,51 +248,83 @@ impl App {
                 return;
             }
             Action::Restart if self.screen == Screen::GameOver => {
-                *self = App::new(self.content.clone(), rand::random());
+                self.start_run();
                 return;
             }
             _ => {}
         }
 
+        if self.pending.is_some() {
+            self.replacement_action(action);
+            return;
+        }
+
         match self.screen {
+            Screen::Title => self.title_action(action),
+            Screen::Options => self.options_action(action),
             Screen::Map => self.map_action(action),
             Screen::Combat => self.combat_action(action),
             Screen::Reward => self.reward_action(action),
+            Screen::Shop => self.shop_action(action),
             Screen::Event => self.event_action(action),
             Screen::GameOver => {}
         }
     }
 
+    fn title_action(&mut self, action: Action) {
+        let count = TitleEntry::ALL.len();
+        match action {
+            Action::NavUp | Action::NavLeft => {
+                self.ui.title_cursor = (self.ui.title_cursor + count - 1) % count;
+            }
+            Action::NavDown | Action::NavRight => {
+                self.ui.title_cursor = (self.ui.title_cursor + 1) % count;
+            }
+            Action::Confirm => match TitleEntry::ALL[self.ui.title_cursor] {
+                TitleEntry::Start => self.start_run(),
+                TitleEntry::Options => self.screen = Screen::Options,
+                TitleEntry::Quit => self.should_quit = true,
+            },
+            _ => {}
+        }
+    }
+
+    fn options_action(&mut self, action: Action) {
+        match action {
+            Action::NavUp => self.ui.option_field = self.ui.option_field.prev(),
+            Action::NavDown => self.ui.option_field = self.ui.option_field.next(),
+            Action::NavLeft => self.options.adjust(self.ui.option_field, false),
+            Action::NavRight => self.options.adjust(self.ui.option_field, true),
+            // Enter backs out; options apply to the next run started.
+            Action::Confirm => self.screen = Screen::Title,
+            _ => {}
+        }
+    }
+
+    /// Begin a fresh run with the current options and a random seed.
+    pub fn start_run(&mut self) {
+        self.start_run_with_seed(rand::random());
+    }
+
+    /// Begin a fresh run from a specific seed. Keeping this separate is what
+    /// lets tests and the demo replay a run exactly.
+    pub fn start_run_with_seed(&mut self, seed: u64) {
+        self.run = Run::new(&self.content, seed, self.options);
+        self.combat = None;
+        self.event = None;
+        self.reward = None;
+        self.shop = None;
+        self.pending = None;
+        self.outcome = None;
+        self.ui = UiState {
+            option_field: self.ui.option_field,
+            ..UiState::default()
+        };
+        self.screen = Screen::Map;
+    }
+
     fn reward_action(&mut self, action: Action) {
         let Some(state) = &self.reward else { return };
-
-        // Second step: the player took a spell but every slot is full, so
-        // they are choosing which one it replaces.
-        if state.replacing.is_some() {
-            let slots = self.run.player.spells.len().max(1);
-            match action {
-                Action::NavLeft | Action::NavUp => {
-                    if let Some(state) = &mut self.reward {
-                        state.replace_cursor = (state.replace_cursor + slots - 1) % slots;
-                    }
-                }
-                Action::NavRight | Action::NavDown => {
-                    if let Some(state) = &mut self.reward {
-                        state.replace_cursor = (state.replace_cursor + 1) % slots;
-                    }
-                }
-                Action::Confirm => self.commit_replacement(),
-                // Back out of the replacement without losing the reward.
-                Action::Undo | Action::Clear => {
-                    if let Some(state) = &mut self.reward {
-                        state.replacing = None;
-                    }
-                }
-                _ => {}
-            }
-            return;
-        }
-
         let count = state.option_count();
         match action {
             Action::NavLeft | Action::NavUp => {
@@ -256,34 +345,113 @@ impl App {
     fn take_reward(&mut self) {
         let Some(state) = &self.reward else { return };
 
-        // Skip.
         if state.cursor >= state.reward.offers.len() {
             self.advance_after_node();
             return;
         }
 
         let spell = state.reward.offers[state.cursor].clone();
-        if self.run.player.spells.len() < SPELL_SLOTS {
-            self.run.player.spells.push(spell);
+        if self.acquire_spell(spell, Screen::Reward) {
             self.advance_after_node();
-        } else if let Some(state) = &mut self.reward {
-            // No room: choose what to drop.
-            state.replacing = Some(state.cursor);
-            state.replace_cursor = 0;
         }
     }
 
-    fn commit_replacement(&mut self) {
-        let Some(state) = &self.reward else { return };
-        let Some(offer) = state.replacing else { return };
-        let Some(spell) = state.reward.offers.get(offer).cloned() else {
+    /// Give the player a spell. Returns true if it landed in a free slot;
+    /// false if the player now has to choose what it replaces.
+    fn acquire_spell(&mut self, spell: Spell, return_to: Screen) -> bool {
+        if self.run.player.spells.len() < SPELL_SLOTS {
+            self.run.player.spells.push(spell);
+            true
+        } else {
+            self.pending = Some(PendingReplacement {
+                incoming: spell,
+                cursor: 0,
+                return_to,
+            });
+            false
+        }
+    }
+
+    /// Shared by the reward and shop screens: pick which spell to discard.
+    fn replacement_action(&mut self, action: Action) {
+        let slots = self.run.player.spells.len().max(1);
+        match action {
+            Action::NavLeft | Action::NavUp => {
+                if let Some(p) = &mut self.pending {
+                    p.cursor = (p.cursor + slots - 1) % slots;
+                }
+            }
+            Action::NavRight | Action::NavDown => {
+                if let Some(p) = &mut self.pending {
+                    p.cursor = (p.cursor + 1) % slots;
+                }
+            }
+            Action::Confirm => {
+                let Some(p) = self.pending.take() else { return };
+                if p.cursor < self.run.player.spells.len() {
+                    self.run.player.spells[p.cursor] = p.incoming;
+                }
+                match p.return_to {
+                    // A reward is a one-off choice, so resolving it ends the node.
+                    Screen::Reward => self.advance_after_node(),
+                    // A shop stays open; there may be more to buy.
+                    other => self.screen = other,
+                }
+            }
+            // Back out. The spell is forfeited -- in a shop it has already been
+            // paid for, which the UI warns about.
+            Action::Undo | Action::Clear => {
+                if let Some(p) = self.pending.take() {
+                    self.screen = p.return_to;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn shop_action(&mut self, action: Action) {
+        let count = self.shop.as_ref().map_or(1, |s| s.stock.len() + 1);
+        match action {
+            Action::NavLeft | Action::NavUp => {
+                self.ui.shop_cursor = (self.ui.shop_cursor + count - 1) % count;
+            }
+            Action::NavRight | Action::NavDown => {
+                self.ui.shop_cursor = (self.ui.shop_cursor + 1) % count;
+            }
+            Action::Confirm => self.buy_selected(),
+            _ => {}
+        }
+    }
+
+    fn buy_selected(&mut self) {
+        let index = self.ui.shop_cursor;
+        let Some(shop) = self.shop.as_mut() else {
             return;
         };
-        let slot = state.replace_cursor;
-        if slot < self.run.player.spells.len() {
-            self.run.player.spells[slot] = spell;
+
+        // The entry past the end of the stock is Leave.
+        if index >= shop.stock.len() {
+            self.advance_after_node();
+            return;
         }
-        self.advance_after_node();
+
+        let spell = shop.spell_at(index);
+        match shop.buy(index, &mut self.run.player) {
+            Ok(_) => self.ui.message = None,
+            Err(BuyError::NotEnoughGold) => {
+                self.ui.message = Some("Not enough gold.".into());
+            }
+            Err(BuyError::AlreadySold) => {
+                self.ui.message = Some("Already sold.".into());
+            }
+            Err(BuyError::SlotsFull) => {
+                // Paid for, but homeless: choose what it replaces.
+                self.ui.message = None;
+                if let Some(spell) = spell {
+                    self.acquire_spell(spell, Screen::Shop);
+                }
+            }
+        }
     }
 
     fn map_action(&mut self, action: Action) {
@@ -409,6 +577,18 @@ impl App {
                 self.ui.action_cursor = ACTION_CAST;
                 self.screen = Screen::Combat;
             }
+            NodeKind::Shop => {
+                let stock = shop::generate(
+                    &self.content.spells,
+                    &self.run.player.spells,
+                    self.run.depth(),
+                    &mut self.run.rng,
+                );
+                self.shop = Some(stock);
+                self.ui.shop_cursor = 0;
+                self.ui.message = None;
+                self.screen = Screen::Shop;
+            }
             NodeKind::Event => {
                 let picked = self.content.events.choose(&mut self.run.rng).cloned();
                 match picked {
@@ -497,6 +677,9 @@ impl App {
         self.combat = None;
         self.event = None;
         self.reward = None;
+        self.shop = None;
+        self.pending = None;
+        self.ui.message = None;
         self.ui.map_cursor = 0;
         self.ui.revealed = 0;
         self.screen = Screen::Map;
@@ -513,6 +696,13 @@ mod tests {
     use super::*;
 
     fn app() -> App {
+        let mut app = App::new(Content::load().expect("content parses"), 1);
+        app.start_run_with_seed(1);
+        app
+    }
+
+    /// An app sitting on the title screen, before any run has begun.
+    fn fresh() -> App {
         App::new(Content::load().expect("content parses"), 1)
     }
 
@@ -523,11 +713,84 @@ mod tests {
     }
 
     #[test]
-    fn a_new_app_starts_on_the_map_with_one_choice() {
+    fn the_game_opens_on_the_title_screen() {
+        let app = fresh();
+        assert_eq!(app.screen, Screen::Title);
+    }
+
+    #[test]
+    fn starting_a_run_puts_you_on_the_map_with_one_choice() {
         let app = app();
         assert_eq!(app.screen, Screen::Map);
         assert_eq!(app.nodes_available().len(), 1);
         assert!(app.outcome.is_none());
+    }
+
+    #[test]
+    fn the_title_menu_starts_a_run() {
+        let mut app = fresh();
+        app.ui.title_cursor = 0; // Start a run
+        app.apply(Action::Confirm);
+        assert_eq!(app.screen, Screen::Map);
+    }
+
+    #[test]
+    fn the_title_menu_opens_and_closes_options() {
+        let mut app = fresh();
+        app.ui.title_cursor = 1; // Options
+        app.apply(Action::Confirm);
+        assert_eq!(app.screen, Screen::Options);
+        app.apply(Action::Confirm);
+        assert_eq!(
+            app.screen,
+            Screen::Title,
+            "Enter should return to the title"
+        );
+    }
+
+    #[test]
+    fn the_title_menu_can_quit() {
+        let mut app = fresh();
+        app.ui.title_cursor = 2; // Quit
+        app.apply(Action::Confirm);
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn the_title_cursor_wraps() {
+        let mut app = fresh();
+        for _ in 0..(TitleEntry::ALL.len() * 2 + 1) {
+            app.apply(Action::NavDown);
+            assert!(app.ui.title_cursor < TitleEntry::ALL.len());
+        }
+    }
+
+    #[test]
+    fn options_change_settings_and_apply_to_the_next_run() {
+        use crate::game::options::MapLength;
+        let mut app = fresh();
+        app.options.map_length = MapLength::Short;
+        app.start_run_with_seed(1);
+        let short = app.run.map.row_count();
+
+        app.options.map_length = MapLength::Long;
+        app.start_run_with_seed(1);
+        assert!(
+            app.run.map.row_count() > short,
+            "map length option had no effect"
+        );
+    }
+
+    #[test]
+    fn adjusting_an_option_only_touches_the_selected_field() {
+        use crate::game::options::OptionField;
+        let mut app = fresh();
+        app.screen = Screen::Options;
+        app.ui.option_field = OptionField::Difficulty;
+        let before = app.options;
+        app.apply(Action::NavRight);
+        assert_ne!(app.options.difficulty, before.difficulty);
+        assert_eq!(app.options.map_length, before.map_length);
     }
 
     #[test]
@@ -796,7 +1059,7 @@ mod tests {
         app.apply(Action::Confirm);
 
         assert_eq!(app.screen, Screen::Reward, "should stay to pick a slot");
-        assert!(app.reward.as_ref().unwrap().replacing.is_some());
+        assert!(app.pending.is_some());
 
         // Replace the second slot.
         app.apply(Action::NavRight);
@@ -822,11 +1085,11 @@ mod tests {
 
         app.reward.as_mut().unwrap().cursor = 0;
         app.apply(Action::Confirm);
-        assert!(app.reward.as_ref().unwrap().replacing.is_some());
+        assert!(app.pending.is_some());
 
         app.apply(Action::Undo);
         assert!(
-            app.reward.as_ref().unwrap().replacing.is_none(),
+            app.pending.is_none(),
             "backspace should return to the offers"
         );
         assert_eq!(app.screen, Screen::Reward);
@@ -841,5 +1104,154 @@ mod tests {
             app.apply(Action::NavRight);
             assert!(app.reward.as_ref().unwrap().cursor < count);
         }
+    }
+
+    /// Drop the player into a shop without needing a map seed that has one.
+    fn in_shop() -> App {
+        let mut app = app();
+        let stock = shop::generate(
+            &app.content.spells,
+            &app.run.player.spells,
+            0,
+            &mut app.run.rng,
+        );
+        app.shop = Some(stock);
+        app.screen = Screen::Shop;
+        app.ui.shop_cursor = 0;
+        app
+    }
+
+    #[test]
+    fn a_shop_node_on_the_map_opens_the_shop() {
+        // Row 0 is always a fight, so look one row up for a shop.
+        for seed in 0..300u64 {
+            let mut app = app();
+            app.start_run_with_seed(seed);
+            app.apply(Action::Confirm);
+            // Skip past the opening fight without playing it.
+            app.combat = None;
+            app.screen = Screen::Map;
+
+            let shop_choice = app
+                .nodes_available()
+                .into_iter()
+                .position(|id| app.run.map.node(id).kind == NodeKind::Shop);
+
+            let Some(index) = shop_choice else { continue };
+            app.ui.map_cursor = index;
+            app.apply(Action::Confirm);
+
+            assert_eq!(app.screen, Screen::Shop);
+            assert!(app.shop.is_some(), "shop stock was not generated");
+            assert!(
+                !app.shop.as_ref().unwrap().stock.is_empty(),
+                "an empty shop would strand the player"
+            );
+            return;
+        }
+        panic!("no shop node appeared in 300 seeds -- generation may be broken");
+    }
+
+    #[test]
+    fn buying_in_a_shop_spends_gold() {
+        let mut app = in_shop();
+        app.run.player.gold = 1000;
+        let price = app.shop.as_ref().unwrap().stock[0].price;
+        app.ui.shop_cursor = 0;
+        app.apply(Action::Confirm);
+        assert_eq!(app.run.player.gold, 1000 - price);
+        assert!(app.shop.as_ref().unwrap().stock[0].sold);
+    }
+
+    #[test]
+    fn buying_without_gold_reports_it_and_changes_nothing() {
+        let mut app = in_shop();
+        app.run.player.gold = 0;
+        app.ui.shop_cursor = 0;
+        app.apply(Action::Confirm);
+        assert_eq!(app.run.player.gold, 0);
+        assert!(!app.shop.as_ref().unwrap().stock[0].sold);
+        assert!(app.ui.message.is_some(), "the refusal should be explained");
+        assert_eq!(
+            app.screen,
+            Screen::Shop,
+            "a refusal must not close the shop"
+        );
+    }
+
+    #[test]
+    fn leaving_a_shop_returns_to_the_map() {
+        let mut app = in_shop();
+        app.ui.shop_cursor = app.shop.as_ref().unwrap().stock.len();
+        app.apply(Action::Confirm);
+        assert_eq!(app.screen, Screen::Map);
+        assert!(app.shop.is_none());
+    }
+
+    #[test]
+    fn buying_a_spell_with_full_slots_asks_what_to_replace_and_keeps_the_shop_open() {
+        let mut app = in_shop();
+        app.run.player.gold = 1000;
+        let filler = app.run.player.spells[0].clone();
+        while app.run.player.spells.len() < SPELL_SLOTS {
+            app.run.player.spells.push(filler.clone());
+        }
+
+        let index = app
+            .shop
+            .as_ref()
+            .unwrap()
+            .stock
+            .iter()
+            .position(|e| matches!(e.item, crate::game::shop::ShopItem::Spell(_)));
+        let Some(index) = index else { return };
+
+        app.ui.shop_cursor = index;
+        app.apply(Action::Confirm);
+        assert!(app.pending.is_some(), "should ask what to replace");
+
+        app.apply(Action::Confirm);
+        assert!(app.pending.is_none());
+        assert_eq!(
+            app.screen,
+            Screen::Shop,
+            "a shop stays open after a purchase resolves"
+        );
+        assert_eq!(app.run.player.spells.len(), SPELL_SLOTS);
+    }
+
+    #[test]
+    fn the_shop_cursor_wraps_over_stock_and_leave() {
+        let mut app = in_shop();
+        let count = app.shop.as_ref().unwrap().stock.len() + 1;
+        for _ in 0..(count * 2 + 1) {
+            app.apply(Action::NavDown);
+            assert!(app.ui.shop_cursor < count);
+        }
+    }
+
+    #[test]
+    fn log_speed_changes_how_fast_the_log_reveals() {
+        use crate::game::options::LogSpeed;
+
+        let reveal_after_one_tick = |speed| {
+            let mut app = in_fight();
+            app.options.log_speed = speed;
+            app.apply(Action::AddComponent(0));
+            cast(&mut app);
+            app.tick();
+            app.visible_log().len()
+        };
+
+        let instant = reveal_after_one_tick(LogSpeed::Instant);
+        let normal = reveal_after_one_tick(LogSpeed::Normal);
+        let slow = reveal_after_one_tick(LogSpeed::Slow);
+
+        assert!(
+            instant > normal,
+            "instant should dump the whole log at once"
+        );
+        assert_eq!(normal, 1, "normal reveals one entry per tick");
+        assert_eq!(slow, 0, "slow takes several ticks for the first entry");
     }
 }

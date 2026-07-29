@@ -10,8 +10,7 @@ use rand::rngs::StdRng;
 use crate::game::content::Content;
 use crate::game::entity::Player;
 use crate::game::map::{Map, NodeId, NodeKind, generate};
-
-pub const MAP_ROWS: usize = 5;
+use crate::game::options::Options;
 
 #[derive(Debug)]
 pub struct Run {
@@ -21,19 +20,21 @@ pub struct Run {
     pub position: Option<NodeId>,
     pub visited: Vec<NodeId>,
     pub seed: u64,
+    pub options: Options,
     pub rng: StdRng,
 }
 
 impl Run {
-    pub fn new(content: &Content, seed: u64) -> Self {
+    pub fn new(content: &Content, seed: u64, options: Options) -> Self {
         let mut rng = StdRng::seed_from_u64(seed);
-        let map = generate(MAP_ROWS, &mut rng);
+        let map = generate(options.map_length.rows(), &mut rng);
         Self {
             map,
             player: Player::new(content.starting_spells()),
             position: None,
             visited: Vec::new(),
             seed,
+            options,
             rng,
         }
     }
@@ -64,9 +65,13 @@ impl Run {
         self.position.map_or(0, |id| self.map.node(id).row)
     }
 
-    /// Difficulty budget for a fight at the current depth.
+    /// Difficulty budget for a fight at the current depth, scaled by the
+    /// difficulty option.
     pub fn encounter_budget(&self) -> u8 {
-        self.map.budget_for_row(self.depth())
+        let base = f32::from(self.map.budget_for_row(self.depth()));
+        (base * self.options.difficulty.budget_scale())
+            .round()
+            .clamp(1.0, f32::from(u8::MAX)) as u8
     }
 
     /// True once the boss node has been cleared.
@@ -85,7 +90,7 @@ mod tests {
 
     #[test]
     fn a_new_run_offers_exactly_the_start_node() {
-        let run = Run::new(&content(), 1);
+        let run = Run::new(&content(), 1, Options::default());
         assert_eq!(run.available(), vec![run.map.start()]);
         assert_eq!(run.depth(), 0);
     }
@@ -95,7 +100,7 @@ mod tests {
         // Walk the map greedily from every seed; the run must always be
         // completable, never dead-ended.
         for seed in 0..100 {
-            let mut run = Run::new(&content(), seed);
+            let mut run = Run::new(&content(), seed, Options::default());
             let mut steps = 0;
             while !run.is_complete() {
                 let next = run.available();
@@ -106,15 +111,18 @@ mod tests {
                 );
                 run.enter(next[0]);
                 steps += 1;
-                assert!(steps <= MAP_ROWS + 2, "seed {seed} did not terminate");
+                assert!(
+                    steps <= Options::default().map_length.rows() + 2,
+                    "seed {seed} did not terminate"
+                );
             }
-            assert_eq!(run.depth(), MAP_ROWS - 1);
+            assert_eq!(run.depth(), Options::default().map_length.rows() - 1);
         }
     }
 
     #[test]
     fn the_encounter_budget_grows_with_depth() {
-        let mut run = Run::new(&content(), 3);
+        let mut run = Run::new(&content(), 3, Options::default());
         let shallow = run.encounter_budget();
         while !run.is_complete() {
             let next = run.available();
@@ -125,8 +133,8 @@ mod tests {
 
     #[test]
     fn the_same_seed_produces_the_same_run() {
-        let a = Run::new(&content(), 12345);
-        let b = Run::new(&content(), 12345);
+        let a = Run::new(&content(), 12345, Options::default());
+        let b = Run::new(&content(), 12345, Options::default());
         assert_eq!(a.map.nodes.len(), b.map.nodes.len());
         for (x, y) in a.map.nodes.iter().zip(b.map.nodes.iter()) {
             assert_eq!(x.kind, y.kind);
@@ -136,7 +144,7 @@ mod tests {
 
     #[test]
     fn the_player_starts_with_spells_and_full_resources() {
-        let run = Run::new(&content(), 1);
+        let run = Run::new(&content(), 1, Options::default());
         assert!(!run.player.spells.is_empty());
         assert_eq!(run.player.hp, run.player.max_hp);
         assert_eq!(run.player.mana, run.player.max_mana);

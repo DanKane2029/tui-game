@@ -21,8 +21,6 @@ pub fn render(f: &mut Frame, app: &App) {
     ])
     .areas(f.area());
 
-    let replacing = state.replacing.is_some();
-
     f.render_widget(
         Paragraph::new(vec![
             Line::styled(
@@ -47,11 +45,6 @@ pub fn render(f: &mut Frame, app: &App) {
         ),
         header,
     );
-
-    if replacing {
-        render_replace(f, body, footer, app);
-        return;
-    }
 
     // Offers, laid out in fixed-width slots so two offers do not stretch to
     // fill the row.
@@ -112,66 +105,4 @@ pub fn render(f: &mut Frame, app: &App) {
     );
 
     debug_assert!(state.reward.offers.len() <= OFFER_COUNT);
-}
-
-/// Second step, shown only when every slot is full: which spell does the new
-/// one replace?
-fn render_replace(
-    f: &mut Frame,
-    body: ratatui::layout::Rect,
-    footer: ratatui::layout::Rect,
-    app: &App,
-) {
-    let Some(state) = &app.reward else { return };
-    let Some(offer) = state.replacing else { return };
-    let Some(incoming) = state.reward.offers.get(offer) else {
-        return;
-    };
-
-    let widths = vec![Constraint::Ratio(1, SPELL_SLOTS as u32); SPELL_SLOTS];
-    let slots = Layout::horizontal(widths).split(body);
-
-    for (i, spell) in app.run.player.spells.iter().enumerate() {
-        f.render_widget(
-            spell_card(
-                spell,
-                format!(" {} {} ", i + 1, spell.name),
-                state.replace_cursor == i,
-                false,
-            ),
-            slots[i],
-        );
-    }
-
-    f.render_widget(
-        Paragraph::new(vec![
-            Line::from(vec![
-                Span::raw("Replace with "),
-                Span::styled(
-                    incoming.name.clone(),
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!(
-                    "  ({} · pow {} · {} MP)",
-                    incoming.element.name(),
-                    incoming.power,
-                    incoming.mana_cost
-                )),
-            ]),
-            Line::raw(""),
-            Line::styled(
-                "←→ choose which to discard    Enter to confirm    Bksp to go back",
-                Style::default().fg(Color::DarkGray),
-            ),
-        ])
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Slots are full")
-                .border_style(Style::default().fg(Color::Yellow)),
-        ),
-        footer,
-    );
 }
