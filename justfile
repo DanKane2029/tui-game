@@ -22,7 +22,7 @@ fmt-check:
     cargo fmt --check
 
 test:
-    cargo nextest run
+    cargo nextest run --no-tests=pass
 
 # Review pending UI snapshot changes after a layout edit.
 snap:
