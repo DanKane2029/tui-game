@@ -7,7 +7,7 @@ expression: frame(&app)
 "└──────────────────────────────────────────────────────────────────────────────────────────────────┘"
 "┌Wares─────────────────────────────────────────────────────────────────────────────────────────────┐"
 "│ ▸ Surge                        60 g   Shock · pow 5 · 3 MP                                       │"
-"│   Spore                        50 g   Toxic · pow 3 · 2 MP                                       │"
+"│   Frost                        50 g   Ice · pow 4 · 2 MP                                         │"
 "│   Poultice (+8 HP)             20 g   Restores health now                                        │"
 "│   Vitality (+4 max HP)         45 g   Permanent for this run                                     │"
 "│   Attunement (+1 max MP)       60 g   More room to combine                                       │"

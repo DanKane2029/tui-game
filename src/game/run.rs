@@ -39,10 +39,11 @@ impl Run {
         }
     }
 
-    /// Nodes the player may move to right now.
+    /// Nodes the player may move to right now. Before the first step that is
+    /// the whole bottom row -- you choose where to begin.
     pub fn available(&self) -> Vec<NodeId> {
         match self.position {
-            None => vec![self.map.start()],
+            None => self.map.rows[0].clone(),
             Some(id) => self.map.node(id).next.clone(),
         }
     }
@@ -91,7 +92,11 @@ mod tests {
     #[test]
     fn a_new_run_offers_exactly_the_start_node() {
         let run = Run::new(&content(), 1, Options::default());
-        assert_eq!(run.available(), vec![run.map.start()]);
+        assert_eq!(run.available(), run.map.rows[0]);
+        assert!(
+            run.available().len() >= 2,
+            "you should choose where to begin"
+        );
         assert_eq!(run.depth(), 0);
     }
 

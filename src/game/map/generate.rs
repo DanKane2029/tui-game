@@ -9,15 +9,18 @@ use rand::{Rng, RngExt};
 
 use crate::game::map::{Map, Node, NodeId, NodeKind};
 
-/// Generate a map with `rows` rows. Row 0 is the single starting node and the
-/// top row is the single boss node.
+/// Generate a map with `rows` rows. The bottom row offers a choice of
+/// starting nodes; the top row is the single boss node.
 pub fn generate(rows: usize, rng: &mut impl Rng) -> Map {
     let rows = rows.max(2);
     let mut nodes: Vec<Node> = Vec::new();
     let mut row_ids: Vec<Vec<NodeId>> = Vec::new();
 
     for row in 0..rows {
-        let width = if row == 0 || row == rows - 1 {
+        // Only the boss row is a single node. The bottom row branches too, so
+        // the player chooses where to begin -- and so no node ever needs more
+        // than two exits to cover the row above it.
+        let width = if row == rows - 1 {
             1
         } else {
             rng.random_range(2..=3)
@@ -61,35 +64,56 @@ pub fn generate(rows: usize, rng: &mut impl Rng) -> Map {
     }
 }
 
-/// Wire one row to the next, guaranteeing both directions of connectivity:
-/// every node here gets an outgoing edge, and every node above gets an
-/// incoming one.
+/// Wire one row to the next.
+///
+/// Built so that two invariants hold by construction rather than by repair:
+/// every node above has something pointing at it, and no node below ends up
+/// with more than two exits. The second keeps the drawn map readable.
 fn connect(nodes: &mut [Node], from: &[NodeId], to: &[NodeId], rng: &mut impl Rng) {
+    let aligned_for = |i: usize| (i * to.len()) / from.len();
+
+    // 1. Everyone gets the node roughly above them, so paths read as lines
+    //    rather than as a tangle.
     for (i, &id) in from.iter().enumerate() {
-        // Bias toward the node directly above, so paths read as lines rather
-        // than as a tangle.
-        let aligned = (i * to.len()) / from.len();
-        let mut targets = vec![to[aligned]];
-
-        if to.len() > 1 && rng.random_range(0..100) < 55 {
-            let other = to[rng.random_range(0..to.len())];
-            if !targets.contains(&other) {
-                targets.push(other);
-            }
-        }
-
-        targets.sort_unstable();
-        nodes[id].next = targets;
+        nodes[id].next = vec![to[aligned_for(i)]];
     }
 
-    // Any node above with nothing pointing at it gets an edge from a random
-    // node below. Without this the map could strand a branch.
-    for &target in to {
-        let has_incoming = from.iter().any(|&id| nodes[id].next.contains(&target));
-        if !has_incoming {
-            let source = from[rng.random_range(0..from.len())];
+    // 2. Cover anything nobody points at, using the nearest source with room.
+    for (j, &target) in to.iter().enumerate() {
+        if from.iter().any(|&id| nodes[id].next.contains(&target)) {
+            continue;
+        }
+        let best = from
+            .iter()
+            .enumerate()
+            .filter(|&(_, &id)| nodes[id].next.len() < 2)
+            .min_by_key(|(i, _)| aligned_for(*i).abs_diff(j))
+            .map(|(_, &id)| id);
+
+        if let Some(source) = best {
             nodes[source].next.push(target);
             nodes[source].next.sort_unstable();
+        }
+    }
+
+    // 3. A little extra branching where there is still room. Kept sparse on
+    //    purpose: the more edges, the less the player's choice matters.
+    for (i, &id) in from.iter().enumerate() {
+        if nodes[id].next.len() >= 2 || to.len() < 2 {
+            continue;
+        }
+        if rng.random_range(0..100) < 38 {
+            // Only ever branch to an adjacent column, so edges stay short.
+            let aligned = aligned_for(i);
+            let neighbour = if aligned + 1 < to.len() {
+                to[aligned + 1]
+            } else {
+                to[aligned.saturating_sub(1)]
+            };
+            if !nodes[id].next.contains(&neighbour) {
+                nodes[id].next.push(neighbour);
+                nodes[id].next.sort_unstable();
+            }
         }
     }
 }
@@ -107,7 +131,7 @@ mod tests {
 
     fn reachable_from_start(map: &Map) -> HashSet<NodeId> {
         let mut seen = HashSet::new();
-        let mut stack = vec![map.start()];
+        let mut stack: Vec<NodeId> = map.rows[0].clone();
         while let Some(id) = stack.pop() {
             if seen.insert(id) {
                 stack.extend(map.node(id).next.iter().copied());
@@ -169,9 +193,12 @@ mod tests {
     }
 
     #[test]
-    fn the_start_and_boss_rows_hold_exactly_one_node() {
+    fn the_boss_row_holds_exactly_one_node_and_the_start_row_branches() {
         for map in maps() {
-            assert_eq!(map.rows.first().unwrap().len(), 1);
+            assert!(
+                map.rows.first().unwrap().len() >= 2,
+                "the bottom row should offer a choice of where to begin"
+            );
             assert_eq!(map.rows.last().unwrap().len(), 1);
             assert_eq!(map.node(map.boss()).kind, NodeKind::Boss);
         }
@@ -204,5 +231,50 @@ mod tests {
         let map = generate(0, &mut StdRng::seed_from_u64(1));
         assert!(map.row_count() >= 2);
         assert_eq!(reachable_from_start(&map).len(), map.nodes.len());
+    }
+
+    /// The point of a branching map: which node you pick must actually rule
+    /// some later nodes out. If every node reached every node above it, the
+    /// branching would be decorative.
+    #[test]
+    fn choosing_a_node_genuinely_rules_others_out() {
+        let mut constrained = 0;
+        let mut total = 0;
+        for map in maps() {
+            for row in 0..map.rows.len() - 1 {
+                let above = &map.rows[row + 1];
+                if above.len() < 2 {
+                    continue;
+                }
+                for &id in &map.rows[row] {
+                    total += 1;
+                    if map.node(id).next.len() < above.len() {
+                        constrained += 1;
+                    }
+                }
+            }
+        }
+        assert!(total > 0, "no branching rows were generated at all");
+        let ratio = constrained as f32 / total as f32;
+        assert!(
+            ratio > 0.5,
+            "only {:.0}% of choices constrain the next row; branching is nearly decorative",
+            ratio * 100.0
+        );
+    }
+
+    #[test]
+    fn no_node_ever_has_more_than_two_exits() {
+        // Keeps the drawn map legible.
+        for map in maps() {
+            for node in &map.nodes {
+                assert!(
+                    node.next.len() <= 2,
+                    "node {} has {} exits",
+                    node.id,
+                    node.next.len()
+                );
+            }
+        }
     }
 }

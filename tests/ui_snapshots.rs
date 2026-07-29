@@ -186,3 +186,17 @@ fn replacement_screen() {
     app.apply(Action::Confirm);
     assert_snapshot!(frame(&app));
 }
+
+/// Part-way up: the travelled path and the still-open branches are drawn
+/// differently from the rest of the map.
+#[test]
+fn map_screen_part_way_through_a_run() {
+    let mut app = app(7);
+    app.apply(Action::Confirm);
+    win_fight(&mut app);
+    // Take the reward's Skip so we land back on the map.
+    let skip = app.reward.as_ref().unwrap().skip_index();
+    app.reward.as_mut().unwrap().cursor = skip;
+    app.apply(Action::Confirm);
+    assert_snapshot!(frame(&app));
+}

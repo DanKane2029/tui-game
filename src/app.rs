@@ -719,10 +719,13 @@ mod tests {
     }
 
     #[test]
-    fn starting_a_run_puts_you_on_the_map_with_one_choice() {
+    fn starting_a_run_puts_you_on_the_map_choosing_where_to_begin() {
         let app = app();
         assert_eq!(app.screen, Screen::Map);
-        assert_eq!(app.nodes_available().len(), 1);
+        assert!(
+            app.nodes_available().len() >= 2,
+            "the bottom row should offer a choice of starting nodes"
+        );
         assert!(app.outcome.is_none());
     }
 
