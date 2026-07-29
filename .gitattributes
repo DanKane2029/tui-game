@@ -1,0 +1,9 @@
+# Normalize all text files to LF in the repository.
+# Without this the working tree drifts to CRLF and `git status` reports every
+# tracked file as modified while the content is byte-identical.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.gif binary
+*.png binary
+*.cast -text

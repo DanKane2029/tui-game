@@ -1,1 +1,18 @@
 /target
+
+# Terminal recordings are intermediate; the rendered GIF in assets/ is committed.
+*.cast
+
+# insta writes these while snapshots are pending review.
+*.snap.new
+*.pending-snap
+
+.env
+
+# Editor / OS noise. Note .vscode/ IS tracked: it carries shared project settings.
+.idea/
+*.swp
+.DS_Store
+
+# Agent worktrees
+/.claude/worktrees/
