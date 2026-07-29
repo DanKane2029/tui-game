@@ -14,6 +14,7 @@ pub struct Player {
     /// Equipped component spells, at most [`SPELL_SLOTS`].
     pub spells: Vec<Spell>,
     pub statuses: Statuses,
+    pub gold: u32,
 }
 
 impl Player {
@@ -25,6 +26,7 @@ impl Player {
             max_mana: 5,
             spells: spells.into_iter().take(SPELL_SLOTS).collect(),
             statuses: Statuses::new(),
+            gold: 0,
         }
     }
 

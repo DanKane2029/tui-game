@@ -105,3 +105,50 @@ fn game_over_screen() {
     settle(&mut app);
     assert_snapshot!(frame(&app));
 }
+
+/// Clear the current fight so the reward screen appears.
+fn win_fight(app: &mut App) {
+    use tui_game::app::{ACTION_CAST, Focus};
+    let count = app.combat.as_ref().expect("in a fight").enemies.len();
+    for enemy in &mut app.combat.as_mut().unwrap().enemies {
+        enemy.hp = 1;
+    }
+    for i in 0..count {
+        if app.combat.is_none() {
+            break;
+        }
+        app.combat.as_mut().unwrap().target = i;
+        app.run.player.mana = 99;
+        app.apply(Action::AddComponent(0));
+        app.ui.focus = Focus::Actions;
+        app.ui.action_cursor = ACTION_CAST;
+        app.apply(Action::Confirm);
+    }
+}
+
+#[test]
+fn reward_screen() {
+    let mut app = app(7);
+    app.apply(Action::Confirm);
+    win_fight(&mut app);
+    settle(&mut app);
+    assert_snapshot!(frame(&app));
+}
+
+/// With every slot full, taking a spell asks which one it replaces.
+#[test]
+fn reward_screen_choosing_what_to_replace() {
+    use tui_game::game::spell::SPELL_SLOTS;
+    let mut app = app(7);
+    app.apply(Action::Confirm);
+    win_fight(&mut app);
+
+    let filler = app.run.player.spells[0].clone();
+    while app.run.player.spells.len() < SPELL_SLOTS {
+        app.run.player.spells.push(filler.clone());
+    }
+    app.apply(Action::Confirm);
+
+    settle(&mut app);
+    assert_snapshot!(frame(&app));
+}

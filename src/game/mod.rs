@@ -7,6 +7,7 @@ pub mod encounter;
 pub mod entity;
 pub mod event;
 pub mod map;
+pub mod reward;
 pub mod run;
 pub mod spell;
 pub mod status;

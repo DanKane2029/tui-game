@@ -9,7 +9,9 @@ use crate::game::content::Content;
 use crate::game::encounter;
 use crate::game::event::{MapEvent, apply_outcome};
 use crate::game::map::{NodeId, NodeKind};
+use crate::game::reward::{self, Reward};
 use crate::game::run::Run;
+use crate::game::spell::SPELL_SLOTS;
 
 /// A fixed set of screens, so an enum beats dynamic dispatch: the compiler
 /// points at every match that needs updating when a variant is added.
@@ -17,8 +19,42 @@ use crate::game::run::Run;
 pub enum Screen {
     Map,
     Combat,
+    Reward,
     Event,
     GameOver,
+}
+
+/// State of the post-fight reward screen.
+#[derive(Debug, Clone)]
+pub struct RewardState {
+    pub reward: Reward,
+    /// Indexes the offers; the value equal to `offers.len()` is the Skip
+    /// button, so Skip is always reachable even when nothing is offered.
+    pub cursor: usize,
+    /// Set once a spell is chosen but every slot is full, at which point the
+    /// player picks which spell it replaces.
+    pub replacing: Option<usize>,
+    pub replace_cursor: usize,
+}
+
+impl RewardState {
+    pub fn new(reward: Reward) -> Self {
+        Self {
+            reward,
+            cursor: 0,
+            replacing: None,
+            replace_cursor: 0,
+        }
+    }
+
+    /// Offers plus the Skip button.
+    pub fn option_count(&self) -> usize {
+        self.reward.offers.len() + 1
+    }
+
+    pub fn skip_index(&self) -> usize {
+        self.reward.offers.len()
+    }
 }
 
 /// Which zone of the fight screen the arrow keys are currently driving.
@@ -97,6 +133,7 @@ pub struct App {
     pub screen: Screen,
     pub combat: Option<Combat>,
     pub event: Option<ActiveEvent>,
+    pub reward: Option<RewardState>,
     pub outcome: Option<RunOutcome>,
     pub ui: UiState,
     pub should_quit: bool,
@@ -111,6 +148,7 @@ impl App {
             screen: Screen::Map,
             combat: None,
             event: None,
+            reward: None,
             outcome: None,
             ui: UiState::default(),
             should_quit: false,
@@ -162,9 +200,90 @@ impl App {
         match self.screen {
             Screen::Map => self.map_action(action),
             Screen::Combat => self.combat_action(action),
+            Screen::Reward => self.reward_action(action),
             Screen::Event => self.event_action(action),
             Screen::GameOver => {}
         }
+    }
+
+    fn reward_action(&mut self, action: Action) {
+        let Some(state) = &self.reward else { return };
+
+        // Second step: the player took a spell but every slot is full, so
+        // they are choosing which one it replaces.
+        if state.replacing.is_some() {
+            let slots = self.run.player.spells.len().max(1);
+            match action {
+                Action::NavLeft | Action::NavUp => {
+                    if let Some(state) = &mut self.reward {
+                        state.replace_cursor = (state.replace_cursor + slots - 1) % slots;
+                    }
+                }
+                Action::NavRight | Action::NavDown => {
+                    if let Some(state) = &mut self.reward {
+                        state.replace_cursor = (state.replace_cursor + 1) % slots;
+                    }
+                }
+                Action::Confirm => self.commit_replacement(),
+                // Back out of the replacement without losing the reward.
+                Action::Undo | Action::Clear => {
+                    if let Some(state) = &mut self.reward {
+                        state.replacing = None;
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        let count = state.option_count();
+        match action {
+            Action::NavLeft | Action::NavUp => {
+                if let Some(state) = &mut self.reward {
+                    state.cursor = (state.cursor + count - 1) % count;
+                }
+            }
+            Action::NavRight | Action::NavDown => {
+                if let Some(state) = &mut self.reward {
+                    state.cursor = (state.cursor + 1) % count;
+                }
+            }
+            Action::Confirm => self.take_reward(),
+            _ => {}
+        }
+    }
+
+    fn take_reward(&mut self) {
+        let Some(state) = &self.reward else { return };
+
+        // Skip.
+        if state.cursor >= state.reward.offers.len() {
+            self.advance_after_node();
+            return;
+        }
+
+        let spell = state.reward.offers[state.cursor].clone();
+        if self.run.player.spells.len() < SPELL_SLOTS {
+            self.run.player.spells.push(spell);
+            self.advance_after_node();
+        } else if let Some(state) = &mut self.reward {
+            // No room: choose what to drop.
+            state.replacing = Some(state.cursor);
+            state.replace_cursor = 0;
+        }
+    }
+
+    fn commit_replacement(&mut self) {
+        let Some(state) = &self.reward else { return };
+        let Some(offer) = state.replacing else { return };
+        let Some(spell) = state.reward.offers.get(offer).cloned() else {
+            return;
+        };
+        let slot = state.replace_cursor;
+        if slot < self.run.player.spells.len() {
+            self.run.player.spells[slot] = spell;
+        }
+        self.advance_after_node();
     }
 
     fn map_action(&mut self, action: Action) {
@@ -279,6 +398,10 @@ impl App {
             NodeKind::Fight | NodeKind::Boss => {
                 let budget = self.run.encounter_budget();
                 let enemies = encounter::generate(&self.content.enemies, budget, &mut self.run.rng);
+                // Mana is a per-turn budget, so a fight always opens on a full
+                // one. Without this, leftover mana from the previous fight
+                // carries over and the first turn is arbitrarily crippled.
+                self.run.player.refill_mana();
                 self.combat = Some(Combat::new(enemies));
                 self.ui.revealed = 0;
                 self.ui.focus = Focus::Spells;
@@ -352,14 +475,28 @@ impl App {
                 self.finish(RunOutcome::Won);
             } else {
                 self.combat = None;
-                self.advance_after_node();
+                self.offer_reward();
             }
         }
+    }
+
+    fn offer_reward(&mut self) {
+        let reward = reward::generate(
+            &self.content.spells,
+            &self.run.player.spells,
+            self.run.depth(),
+            &mut self.run.rng,
+        );
+        // Gold is banked immediately; only the spell is a choice.
+        self.run.player.gold += reward.gold;
+        self.reward = Some(RewardState::new(reward));
+        self.screen = Screen::Reward;
     }
 
     fn advance_after_node(&mut self) {
         self.combat = None;
         self.event = None;
+        self.reward = None;
         self.ui.map_cursor = 0;
         self.ui.revealed = 0;
         self.screen = Screen::Map;
@@ -554,5 +691,155 @@ mod tests {
         let mut app = app();
         app.apply(Action::Quit);
         assert!(app.should_quit);
+    }
+
+    /// Cast the current build, without depending on where focus happens to be.
+    fn cast(app: &mut App) {
+        app.ui.focus = Focus::Actions;
+        app.ui.action_cursor = ACTION_CAST;
+        app.apply(Action::Confirm);
+    }
+
+    /// Kill everything in the current fight.
+    fn win_fight(app: &mut App) {
+        app.run.player.mana = 99;
+        let count = app.combat.as_ref().expect("in a fight").enemies.len();
+        for enemy in &mut app.combat.as_mut().unwrap().enemies {
+            enemy.hp = 1;
+        }
+        for i in 0..count {
+            if app.screen != Screen::Combat {
+                break;
+            }
+            app.combat.as_mut().unwrap().target = i;
+            app.run.player.mana = 99;
+            app.apply(Action::AddComponent(0));
+            cast(app);
+        }
+    }
+
+    /// Regression: mana is a per-turn budget, so leftover from the previous
+    /// fight must not carry into the next one.
+    #[test]
+    fn a_fight_always_opens_on_full_mana() {
+        let mut app = app();
+        app.run.player.mana = 1;
+        app.apply(Action::Confirm);
+        assert_eq!(
+            app.run.player.mana, app.run.player.max_mana,
+            "entering a fight should refill mana"
+        );
+    }
+
+    #[test]
+    fn mana_refills_at_the_end_of_every_turn() {
+        let mut app = in_fight();
+        app.run.player.mana = 0;
+        app.apply(Action::EndTurn);
+        if app.screen == Screen::Combat {
+            assert_eq!(app.run.player.mana, app.run.player.max_mana);
+        }
+    }
+
+    #[test]
+    fn winning_a_fight_offers_a_reward_and_banks_gold() {
+        let mut app = in_fight();
+        win_fight(&mut app);
+        assert_eq!(app.screen, Screen::Reward, "no reward screen after a win");
+        assert!(app.run.player.gold > 0, "gold was not awarded");
+        let state = app.reward.as_ref().unwrap();
+        assert!(state.reward.offers.len() <= crate::game::reward::OFFER_COUNT);
+    }
+
+    #[test]
+    fn taking_a_reward_spell_adds_it_and_returns_to_the_map() {
+        let mut app = in_fight();
+        win_fight(&mut app);
+        let before = app.run.player.spells.len();
+        let offered = app.reward.as_ref().unwrap().reward.offers[0].name.clone();
+
+        app.reward.as_mut().unwrap().cursor = 0;
+        app.apply(Action::Confirm);
+
+        assert_eq!(app.screen, Screen::Map);
+        assert_eq!(app.run.player.spells.len(), before + 1);
+        assert!(app.run.player.spells.iter().any(|s| s.name == offered));
+    }
+
+    #[test]
+    fn skipping_a_reward_changes_nothing_but_still_returns_to_the_map() {
+        let mut app = in_fight();
+        win_fight(&mut app);
+        let before = app.run.player.spells.len();
+
+        let skip = app.reward.as_ref().unwrap().skip_index();
+        app.reward.as_mut().unwrap().cursor = skip;
+        app.apply(Action::Confirm);
+
+        assert_eq!(app.screen, Screen::Map);
+        assert_eq!(app.run.player.spells.len(), before);
+    }
+
+    #[test]
+    fn taking_a_spell_with_full_slots_asks_which_to_replace() {
+        let mut app = in_fight();
+        win_fight(&mut app);
+
+        // Fill every slot so the reward has nowhere to go.
+        let filler = app.run.player.spells[0].clone();
+        while app.run.player.spells.len() < SPELL_SLOTS {
+            app.run.player.spells.push(filler.clone());
+        }
+
+        let offered = app.reward.as_ref().unwrap().reward.offers[0].name.clone();
+        app.reward.as_mut().unwrap().cursor = 0;
+        app.apply(Action::Confirm);
+
+        assert_eq!(app.screen, Screen::Reward, "should stay to pick a slot");
+        assert!(app.reward.as_ref().unwrap().replacing.is_some());
+
+        // Replace the second slot.
+        app.apply(Action::NavRight);
+        app.apply(Action::Confirm);
+
+        assert_eq!(app.screen, Screen::Map);
+        assert_eq!(
+            app.run.player.spells.len(),
+            SPELL_SLOTS,
+            "slots stay capped"
+        );
+        assert_eq!(app.run.player.spells[1].name, offered);
+    }
+
+    #[test]
+    fn backing_out_of_a_replacement_returns_to_the_offers() {
+        let mut app = in_fight();
+        win_fight(&mut app);
+        let filler = app.run.player.spells[0].clone();
+        while app.run.player.spells.len() < SPELL_SLOTS {
+            app.run.player.spells.push(filler.clone());
+        }
+
+        app.reward.as_mut().unwrap().cursor = 0;
+        app.apply(Action::Confirm);
+        assert!(app.reward.as_ref().unwrap().replacing.is_some());
+
+        app.apply(Action::Undo);
+        assert!(
+            app.reward.as_ref().unwrap().replacing.is_none(),
+            "backspace should return to the offers"
+        );
+        assert_eq!(app.screen, Screen::Reward);
+    }
+
+    #[test]
+    fn the_reward_cursor_wraps_over_offers_and_skip() {
+        let mut app = in_fight();
+        win_fight(&mut app);
+        let count = app.reward.as_ref().unwrap().option_count();
+        for _ in 0..(count * 2 + 1) {
+            app.apply(Action::NavRight);
+            assert!(app.reward.as_ref().unwrap().cursor < count);
+        }
     }
 }

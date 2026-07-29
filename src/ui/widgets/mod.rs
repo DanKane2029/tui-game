@@ -1,9 +1,66 @@
 //! Small reusable rendering pieces.
 
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Line;
+use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::game::element::Element;
+use crate::game::spell::Spell;
 use crate::game::status::Status;
+
+/// Border style for a panel that may or may not have the arrow keys.
+pub fn focus_style(focused: bool) -> Style {
+    if focused {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    }
+}
+
+/// One spell card: art, element, power, cost and blurb.
+///
+/// Shared by the fight screen and the reward screen so a spell looks the same
+/// wherever it appears.
+pub fn spell_card<'a>(spell: &Spell, label: String, selected: bool, dimmed: bool) -> Paragraph<'a> {
+    let art_style = if dimmed {
+        Style::default().fg(Color::DarkGray)
+    } else {
+        Style::default().fg(element_color(spell.element))
+    };
+    let text_color = if dimmed {
+        Color::DarkGray
+    } else {
+        Color::White
+    };
+
+    let mut lines: Vec<Line> = spell
+        .art
+        .iter()
+        .map(|row| Line::styled(row.clone(), art_style))
+        .collect();
+
+    lines.push(Line::styled(
+        format!("{} · pow {}", spell.element.name(), spell.power),
+        Style::default().fg(text_color),
+    ));
+    lines.push(Line::styled(
+        format!("{} MP", spell.mana_cost),
+        Style::default().fg(if dimmed { Color::DarkGray } else { Color::Blue }),
+    ));
+    lines.push(Line::styled(
+        spell.blurb.clone(),
+        Style::default().fg(Color::DarkGray),
+    ));
+
+    Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(label)
+            .border_style(focus_style(selected)),
+    )
+}
 
 /// A block meter, e.g. `███░░`.
 pub fn meter(current: u16, max: u16, width: usize) -> String {

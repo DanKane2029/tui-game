@@ -15,18 +15,9 @@ use crate::app::{ACTION_CAST, ACTION_END_TURN, App, Focus};
 use crate::game::combat::{Combat, Event};
 use crate::game::entity::{Enemy, Player};
 use crate::game::spell::SPELL_SLOTS;
-use crate::ui::widgets::{element_color, health_color, meter, status_color};
-
-/// Border style for a panel that may or may not have the arrow keys.
-fn focus_style(focused: bool) -> Style {
-    if focused {
-        Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    }
-}
+use crate::ui::widgets::{
+    element_color, focus_style, health_color, meter, spell_card, status_color,
+};
 
 pub fn render(f: &mut Frame, app: &App) {
     let Some(combat) = &app.combat else { return };
@@ -34,7 +25,7 @@ pub fn render(f: &mut Frame, app: &App) {
     // The enemy and spell rows are fixed height; the log takes whatever is
     // left, so it grows on a tall terminal instead of leaving dead space.
     let [enemies_area, log_area, mid_area, spells_area] = Layout::vertical([
-        Constraint::Length(8),
+        Constraint::Length(9),
         Constraint::Fill(1),
         Constraint::Length(5),
         Constraint::Length(8),
@@ -53,19 +44,29 @@ pub fn render(f: &mut Frame, app: &App) {
 }
 
 fn render_enemies(f: &mut Frame, area: Rect, app: &App, combat: &Combat) {
+    let focused = app.ui.focus == Focus::Enemies;
+
+    // One panel groups the whole row, so the enemies read as a single zone --
+    // which is also what the arrow keys treat them as.
+    let group = Block::default()
+        .borders(Borders::ALL)
+        .title("Enemies")
+        .border_style(focus_style(focused));
+    let inner = group.inner(area);
+    f.render_widget(group, area);
+
     let living: Vec<(usize, &Enemy)> = combat.living_enemies().collect();
     if living.is_empty() {
         return;
     }
 
-    let focused = app.ui.focus == Focus::Enemies;
-    // Cap each panel and let fillers on both sides absorb the slack, so one
+    // Cap each entry and let fillers on both sides absorb the slack, so one
     // enemy sits centred at a sensible size rather than stretching across the
     // screen or hugging the left edge.
     let mut widths: Vec<Constraint> = vec![Constraint::Fill(1)];
-    widths.extend(vec![Constraint::Max(34); living.len()]);
+    widths.extend(vec![Constraint::Max(30); living.len()]);
     widths.push(Constraint::Fill(1));
-    let slots = Layout::horizontal(widths).split(area);
+    let slots = Layout::horizontal(widths).split(inner);
 
     for ((index, enemy), rect) in living.iter().zip(slots.iter().skip(1)) {
         let targeted = *index == combat.target;
@@ -117,21 +118,27 @@ fn render_enemies(f: &mut Frame, area: Rect, app: &App, combat: &Combat) {
             ));
         }
 
-        let title = if targeted {
-            format!("▸ {}", enemy.name)
+        // No inner border: the group panel already frames them, and doubling
+        // borders wastes two rows of height for nothing. The target marker and
+        // colour carry the selection instead.
+        let name_style = if targeted {
+            focus_style(true)
         } else {
-            format!("  {}", enemy.name)
+            Style::default().fg(Color::Gray)
         };
-
-        f.render_widget(
-            Paragraph::new(lines).block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-                    .border_style(focus_style(focused && targeted)),
+        lines.insert(
+            0,
+            Line::styled(
+                if targeted {
+                    format!("▸ {}", enemy.name)
+                } else {
+                    format!("  {}", enemy.name)
+                },
+                name_style,
             ),
-            *rect,
         );
+
+        f.render_widget(Paragraph::new(lines), *rect);
     }
 }
 
@@ -367,54 +374,16 @@ fn render_spells(f: &mut Frame, area: Rect, app: &App, combat: &Combat) {
         };
 
         let selected = focused && i == app.ui.spell_cursor;
+        // Dim anything the remaining mana cannot pay for, including what is
+        // already committed to the build.
         let affordable = committed.saturating_add(spell.mana_cost) <= player.mana;
-        let art_style = if affordable {
-            Style::default().fg(element_color(spell.element))
-        } else {
-            Style::default().fg(Color::DarkGray)
-        };
 
-        let mut lines: Vec<Line> = spell
-            .art
-            .iter()
-            .map(|row| Line::styled(row.clone(), art_style))
-            .collect();
-
-        lines.push(Line::styled(
-            format!("{} · pow {}", spell.element.name(), spell.power),
-            Style::default().fg(if affordable {
-                Color::White
-            } else {
-                Color::DarkGray
-            }),
-        ));
-        lines.push(Line::styled(
-            format!("{} MP", spell.mana_cost),
-            Style::default().fg(if affordable {
-                Color::Blue
-            } else {
-                Color::DarkGray
-            }),
-        ));
-        lines.push(Line::styled(
-            spell.blurb.clone(),
-            Style::default().fg(Color::DarkGray),
-        ));
-
-        let title = if selected {
+        let label = if selected {
             format!("▸{} {}", i + 1, spell.name)
         } else {
             format!(" {} {}", i + 1, spell.name)
         };
 
-        f.render_widget(
-            Paragraph::new(lines).block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-                    .border_style(focus_style(selected)),
-            ),
-            *rect,
-        );
+        f.render_widget(spell_card(spell, label, selected, !affordable), *rect);
     }
 }
