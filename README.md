@@ -1,5 +1,8 @@
 # Incantation
 
+[![CI](https://github.com/DanKane2029/incantation/actions/workflows/ci.yml/badge.svg)](https://github.com/DanKane2029/incantation/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **[▶ Play it in your browser](https://dankane2029.github.io/incantation/)** — no install, no download.
 
 A roguelike spell-battler for the terminal, in Rust. You climb a branching map, and every fight
@@ -190,3 +193,7 @@ and content is cheap to add on top.
 Every merge to `main` rebuilds the WebAssembly bundle and republishes it to GitHub Pages.
 
 Not done yet: an animated demo recording, persistent progression between runs, and relics.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Do what you like with it.
