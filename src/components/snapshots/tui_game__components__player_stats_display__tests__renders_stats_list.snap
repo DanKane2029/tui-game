@@ -1,8 +1,0 @@
----
-source: src/components/player_stats_display.rs
-expression: terminal.backend()
----
-"TEST 1              "
-"TEST 2              "
-"TEST 3              "
-"                    "

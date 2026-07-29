@@ -139,7 +139,12 @@ Gust, 2), Frost (2 MP, Ice, 4), Surge (3 MP, Shock, 5):
 | `{Ember ×3}` | **Inferno** — 9 dmg, single, Burned (3) | Tier 3 |
 | `{Ember, Ember, Gust}` | **Firestorm** — 5 dmg, **all**, Burned (2) | Gust modifies targeting, ×0.8 power |
 | `{Ember, Douse}` | **Steam Burst** — 5 dmg, single, Blind (2) | Tie → fuses to Steam |
-| `{Surge, Douse}` | **Chain Lightning** — 14 dmg, single | Water conducts, ×2.0 |
+| `{Surge, Douse}` | **Thunderclap** — 10 dmg, single | Water conducts, ×2.0 |
+
+Note the last row: Douse contributes 2 power but is a *modifier*, not the base, so its
+power does not add to the damage — Surge's 5 is doubled to 10, not `(5+2)×2`. A modifier
+costs mana and reshapes the spell rather than making it bigger. That is what keeps adding
+components a genuine tradeoff instead of a strict upgrade.
 
 ---
 
@@ -153,7 +158,7 @@ than from status bookkeeping.
 | Burned | Damage at end of round, for N rounds |
 | Wet | Incoming Shock damage doubled |
 | Frozen | Skips its next turn |
-| Blind | Attacks may miss |
+| Blind | Halves the afflicted enemy's outgoing damage |
 | Poisoned | Damage at end of round, ignores shields |
 
 ---

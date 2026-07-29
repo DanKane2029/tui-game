@@ -4,19 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# crossterm is NOT declared directly -- it comes through ratatui::crossterm, so
+# there is only ever one copy of it in the build.
+ratatui = "0.30.2"
 color-eyre = "0.6.5"
-crossterm = "0.29.0"
-dialoguer = "0.11.0"
-dotenv = "0.15.0"
-env_logger = "0.11.8"
-log = "0.4.27"
-nom = "8.0.0"
-ratatui = "0.29.0"
-ron = "0.10.1"
+ron = "0.12.2"
 serde = { version = "1.0.219", features = ["derive"] }
-tokio = { version = "1.46.1", features = ["full"] }
+rand = "0.10.2"
 
 [dev-dependencies]
-# Snapshot-tests rendered frames from ratatui's TestBackend, so layout can be
-# verified without launching the game.
+# Snapshot-tests frames rendered through ratatui's TestBackend.
 insta = "1.48"
+# Permutations, for proving incantation resolution is order-independent.
+itertools = "0.15"

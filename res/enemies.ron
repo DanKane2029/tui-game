@@ -1,20 +1,36 @@
+// The enemy pool. Encounters draw from this by difficulty, so adding an enemy
+// is a single entry here -- there are no encounter tables to update.
 [
-	Enemy(
-		name: "Bat",
-		health: 5,
-		damage_value: 1,
-		damage_element: Gust
-	),
-	Enemy(
-		name: "Goblin",
-		health: 10,
-		damage_value: 2,
-		damage_element: None
-	),
-	Enemy(
-		name: "Spider",
-		health: 5,
-		damage_value: 1,
-		damage_element: Toxic
-	)
+    (
+        name: "Bat", max_hp: 8, power: 2, element: Gust, difficulty: 1,
+        art: [
+            "  /\\_/\\  ",
+            " ( o.o ) ",
+            "  ^^ ^^  ",
+        ],
+    ),
+    (
+        name: "Spider", max_hp: 10, power: 2, element: Toxic, difficulty: 2,
+        art: [
+            " /\\oo/\\ ",
+            "  (..)  ",
+            " /|||||\\ ",
+        ],
+    ),
+    (
+        name: "Goblin", max_hp: 14, power: 3, element: Earth, armor: 1, difficulty: 2,
+        art: [
+            "  ,---,  ",
+            " ( >_< ) ",
+            "  /| |\\  ",
+        ],
+    ),
+    (
+        name: "Golem", max_hp: 24, power: 5, element: Earth, armor: 3, difficulty: 4,
+        art: [
+            " [#####] ",
+            " [ o o ] ",
+            " /|   |\\ ",
+        ],
+    ),
 ]
