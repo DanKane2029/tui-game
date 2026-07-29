@@ -6,11 +6,11 @@ use color_eyre::eyre::Result;
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event};
 
+use incantation::app::App;
+use incantation::game::content::Content;
+use incantation::input::Key;
+use incantation::{input, ui};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use tui_game::app::App;
-use tui_game::game::content::Content;
-use tui_game::input::Key;
-use tui_game::{input, ui};
 
 /// Translate a crossterm keypress into the platform-neutral [`Key`] that
 /// `input` understands. The browser build does the same from its own event

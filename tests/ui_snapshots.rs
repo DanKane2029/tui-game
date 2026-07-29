@@ -8,10 +8,10 @@ use insta::assert_snapshot;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
-use tui_game::action::Action;
-use tui_game::app::App;
-use tui_game::game::content::Content;
-use tui_game::ui;
+use incantation::action::Action;
+use incantation::app::App;
+use incantation::game::content::Content;
+use incantation::ui;
 
 fn app(seed: u64) -> App {
     let mut app = App::new(Content::load().expect("content parses"), seed);
@@ -115,7 +115,7 @@ fn game_over_screen() {
 
 /// Clear the current fight so the reward screen appears.
 fn win_fight(app: &mut App) {
-    use tui_game::app::{ACTION_CAST, Focus};
+    use incantation::app::{ACTION_CAST, Focus};
     let count = app.combat.as_ref().expect("in a fight").enemies.len();
     for enemy in &mut app.combat.as_mut().unwrap().enemies {
         enemy.hp = 1;
@@ -157,7 +157,7 @@ fn options_screen() {
 
 #[test]
 fn shop_screen() {
-    use tui_game::game::shop;
+    use incantation::game::shop;
     let mut app = app(7);
     app.run.player.gold = 80;
     let stock = shop::generate(
@@ -167,7 +167,7 @@ fn shop_screen() {
         &mut app.run.rng,
     );
     app.shop = Some(stock);
-    app.screen = tui_game::app::Screen::Shop;
+    app.screen = incantation::app::Screen::Shop;
     assert_snapshot!(frame(&app));
 }
 
@@ -175,7 +175,7 @@ fn shop_screen() {
 /// reward screen or the shop.
 #[test]
 fn replacement_screen() {
-    use tui_game::game::spell::SPELL_SLOTS;
+    use incantation::game::spell::SPELL_SLOTS;
     let mut app = app(7);
     app.apply(Action::Confirm);
     win_fight(&mut app);
