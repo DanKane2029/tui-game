@@ -1,1 +1,0 @@
-pub static PLAYER_SPELL_SLOTS: usize = 5;

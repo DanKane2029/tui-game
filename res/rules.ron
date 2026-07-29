@@ -1,0 +1,69 @@
+// The combination rule table.
+//
+// Rules are keyed on ELEMENTS, never on specific spells. That is what makes
+// adding a spell cheap: a new spell inherits every interaction its element
+// already has, instead of needing a recipe written against each existing spell.
+(
+    interactions: [
+        // Fusion: two elements become a third. Symmetric -- the order written
+        // here is irrelevant.
+        ((Flame, Water), Fuse(Steam)),
+        ((Flame, Earth), Fuse(Magma)),
+        ((Water, Toxic), Fuse(Blight)),
+        ((Ice,   Gust),  Fuse(Blizzard)),
+
+        // Modify: the FIRST element stays as the base, the SECOND reshapes it.
+        // That order expresses the relationship between the elements. It has
+        // nothing to do with the order the player pressed keys.
+        ((Flame, Gust),  Modify((power: 0.8, targeting: Some(All)))),
+        ((Shock, Water), Modify((power: 2.0))),
+        ((Ice,   Earth), Modify((power: 1.2, pierce: true))),
+        ((Toxic, Gust),  Modify((power: 0.7, targeting: Some(All)))),
+        ((Shock, Earth), Modify((power: 0.5))),
+        ((Earth, Gust),  Modify((power: 1.1, pierce: true))),
+        ((Magma, Gust),  Modify((power: 0.8, targeting: Some(All)))),
+        ((Steam, Gust),  Modify((power: 0.8, targeting: Some(All)))),
+    ],
+
+    names: [
+        (element: Flame, tier: Some(1), name: "Ember"),
+        (element: Flame, tier: Some(2), name: "Fireball"),
+        (element: Flame, tier: Some(3), name: "Inferno"),
+        (element: Flame, targeting: Some(All), name: "Firestorm"),
+
+        (element: Water, tier: Some(1), name: "Douse"),
+        (element: Water, tier: Some(2), name: "Torrent"),
+        (element: Water, tier: Some(3), name: "Deluge"),
+
+        (element: Ice, tier: Some(1), name: "Frost"),
+        (element: Ice, tier: Some(2), name: "Glacial Spike"),
+
+        (element: Shock, tier: Some(1), name: "Surge"),
+        (element: Shock, tier: Some(2), name: "Thunderclap"),
+
+        (element: Gust, tier: Some(1), name: "Gust"),
+        (element: Gust, tier: Some(2), name: "Cyclone"),
+
+        (element: Earth, tier: Some(1), name: "Shard"),
+        (element: Earth, tier: Some(2), name: "Landslide"),
+
+        (element: Toxic, tier: Some(1), name: "Spore"),
+        (element: Toxic, tier: Some(2), name: "Miasma"),
+
+        (element: Steam,    name: "Steam Burst"),
+        (element: Magma,    name: "Magma Lance"),
+        (element: Blight,   name: "Blight Cloud"),
+        (element: Blizzard, name: "Blizzard"),
+    ],
+
+    element_statuses: [
+        (element: Flame,    min_tier: 2, status: Burned,   rounds: 2),
+        (element: Water,                 status: Wet,      rounds: 2),
+        (element: Ice,      min_tier: 2, status: Frozen,   rounds: 1),
+        (element: Toxic,                 status: Poisoned, rounds: 3),
+        (element: Steam,                 status: Blind,    rounds: 2),
+        (element: Magma,    min_tier: 2, status: Burned,   rounds: 3),
+        (element: Blight,                status: Poisoned, rounds: 3),
+        (element: Blizzard,              status: Frozen,   rounds: 1),
+    ],
+)

@@ -1,69 +1,56 @@
-// The prototype carries scaffolding that nothing calls yet: GameManager, EnemyFactory,
-// FightFactory, the Status enum, and most Player fields. It is kept rather than deleted
-// because it records the intended design, and the rewrite will decide what survives.
-// Until then it would trip clippy's -D warnings in CI. Remove this once the rewrite lands.
-#![allow(dead_code)]
+//! Terminal setup and teardown, and the loop.
 
-mod components;
-mod model;
+use std::time::Duration;
 
-use color_eyre::Result;
-use dotenv::dotenv;
-use ratatui::{DefaultTerminal, Frame, init as ratatui_init};
-use tokio::{
-    runtime::Runtime,
-    sync::broadcast::{Sender, channel},
-};
+use color_eyre::eyre::Result;
+use ratatui::DefaultTerminal;
+use ratatui::crossterm::event::{self, Event};
 
-use components::{App, Component};
+use tui_game::app::App;
+use tui_game::game::content::Content;
+use tui_game::{input, ui};
 
-use model::{InputEvent, get_input_event};
+fn main() -> Result<()> {
+    color_eyre::install()?;
 
-use crate::model::GameEvent;
+    // Load content before touching the terminal, so a content error prints as
+    // an ordinary message instead of into a half-initialised alternate screen.
+    let content = Content::load()?;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    env_logger::init();
-    dotenv().ok();
-    match Runtime::new() {
-        Ok(rt) => {
-            let mut terminal: DefaultTerminal = ratatui_init();
-            let (event_sender, event_reciever) = channel::<InputEvent>(10);
-            let (game_event_sender, game_event_receiver) = channel::<GameEvent>(10);
-            let mut app: App = App::new(
-                event_reciever,
-                event_sender.clone(),
-                game_event_receiver,
-                game_event_sender,
-            );
-            let event_handler_token = rt.spawn(event_handler(event_sender));
-            let result = run(&mut terminal, &mut app).await;
-            event_handler_token.abort();
-            rt.shutdown_background();
-            ratatui::restore();
-            result
-        }
-        Err(_) => Ok(()),
-    }
+    let mut terminal = ratatui::init();
+    install_panic_hook();
+
+    let result = run(&mut terminal, App::from_content(content)?);
+
+    ratatui::restore();
+    result
 }
 
-async fn event_handler(event_sender: Sender<InputEvent>) {
-    loop {
-        if let Some(event) = get_input_event() {
-            let _ = event_sender.send(event);
-        }
-    }
+/// Restore the terminal *before* the panic message prints. Without this a
+/// panic leaves the terminal in raw mode on the alternate screen and wrecks
+/// the user's shell.
+fn install_panic_hook() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        ratatui::restore();
+        previous(info);
+    }));
 }
 
-async fn run(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
-    loop {
-        app.handle_events().await;
-        app.update();
-        terminal.draw(|frame: &mut Frame| {
-            app.render(frame, frame.area());
-        })?;
-        if app.should_close {
-            break Ok(());
+fn run(terminal: &mut DefaultTerminal, mut app: App) -> Result<()> {
+    while !app.should_quit {
+        terminal.draw(|frame| ui::render(frame, &app))?;
+
+        // Polling is what stops this loop spinning a core, and it doubles as
+        // the timer that paces the combat log.
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+            && let Some(action) = input::map(key, app.screen, app.awaiting_dismiss())
+        {
+            app.apply(action);
         }
+
+        app.tick();
     }
+    Ok(())
 }

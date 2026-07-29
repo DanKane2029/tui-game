@@ -1,0 +1,157 @@
+//! Run state -- the roguelike layer that sits above individual fights.
+//!
+//! `Run` owns the one and only [`Player`]. Combat borrows it rather than
+//! holding a copy, which is what makes the prototype's duplicate-player bug
+//! impossible to reintroduce.
+
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
+use crate::game::content::Content;
+use crate::game::entity::Player;
+use crate::game::map::{Map, NodeId, NodeKind, generate};
+use crate::game::options::Options;
+
+#[derive(Debug)]
+pub struct Run {
+    pub map: Map,
+    pub player: Player,
+    /// The node currently occupied. `None` before the first node is entered.
+    pub position: Option<NodeId>,
+    pub visited: Vec<NodeId>,
+    pub seed: u64,
+    pub options: Options,
+    pub rng: StdRng,
+}
+
+impl Run {
+    pub fn new(content: &Content, seed: u64, options: Options) -> Self {
+        let mut rng = StdRng::seed_from_u64(seed);
+        let map = generate(options.map_length.rows(), &mut rng);
+        Self {
+            map,
+            player: Player::new(content.starting_spells()),
+            position: None,
+            visited: Vec::new(),
+            seed,
+            options,
+            rng,
+        }
+    }
+
+    /// Nodes the player may move to right now. Before the first step that is
+    /// the whole bottom row -- you choose where to begin.
+    pub fn available(&self) -> Vec<NodeId> {
+        match self.position {
+            None => self.map.rows[0].clone(),
+            Some(id) => self.map.node(id).next.clone(),
+        }
+    }
+
+    pub fn can_enter(&self, id: NodeId) -> bool {
+        self.available().contains(&id)
+    }
+
+    pub fn enter(&mut self, id: NodeId) {
+        debug_assert!(self.can_enter(id), "entered an unreachable node");
+        self.position = Some(id);
+        self.visited.push(id);
+    }
+
+    pub fn current_kind(&self) -> Option<NodeKind> {
+        self.position.map(|id| self.map.node(id).kind)
+    }
+
+    pub fn depth(&self) -> usize {
+        self.position.map_or(0, |id| self.map.node(id).row)
+    }
+
+    /// Difficulty budget for a fight at the current depth, scaled by the
+    /// difficulty option.
+    pub fn encounter_budget(&self) -> u8 {
+        let base = f32::from(self.map.budget_for_row(self.depth()));
+        (base * self.options.difficulty.budget_scale())
+            .round()
+            .clamp(1.0, f32::from(u8::MAX)) as u8
+    }
+
+    /// True once the boss node has been cleared.
+    pub fn is_complete(&self) -> bool {
+        self.position == Some(self.map.boss())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn content() -> Content {
+        Content::load().expect("content parses")
+    }
+
+    #[test]
+    fn a_new_run_offers_exactly_the_start_node() {
+        let run = Run::new(&content(), 1, Options::default());
+        assert_eq!(run.available(), run.map.rows[0]);
+        assert!(
+            run.available().len() >= 2,
+            "you should choose where to begin"
+        );
+        assert_eq!(run.depth(), 0);
+    }
+
+    #[test]
+    fn a_full_climb_always_reaches_the_boss() {
+        // Walk the map greedily from every seed; the run must always be
+        // completable, never dead-ended.
+        for seed in 0..100 {
+            let mut run = Run::new(&content(), seed, Options::default());
+            let mut steps = 0;
+            while !run.is_complete() {
+                let next = run.available();
+                assert!(
+                    !next.is_empty(),
+                    "seed {seed} dead-ended at depth {}",
+                    run.depth()
+                );
+                run.enter(next[0]);
+                steps += 1;
+                assert!(
+                    steps <= Options::default().map_length.rows() + 2,
+                    "seed {seed} did not terminate"
+                );
+            }
+            assert_eq!(run.depth(), Options::default().map_length.rows() - 1);
+        }
+    }
+
+    #[test]
+    fn the_encounter_budget_grows_with_depth() {
+        let mut run = Run::new(&content(), 3, Options::default());
+        let shallow = run.encounter_budget();
+        while !run.is_complete() {
+            let next = run.available();
+            run.enter(next[0]);
+        }
+        assert!(run.encounter_budget() > shallow);
+    }
+
+    #[test]
+    fn the_same_seed_produces_the_same_run() {
+        let a = Run::new(&content(), 12345, Options::default());
+        let b = Run::new(&content(), 12345, Options::default());
+        assert_eq!(a.map.nodes.len(), b.map.nodes.len());
+        for (x, y) in a.map.nodes.iter().zip(b.map.nodes.iter()) {
+            assert_eq!(x.kind, y.kind);
+            assert_eq!(x.next, y.next);
+        }
+    }
+
+    #[test]
+    fn the_player_starts_with_spells_and_full_resources() {
+        let run = Run::new(&content(), 1, Options::default());
+        assert!(!run.player.spells.is_empty());
+        assert_eq!(run.player.hp, run.player.max_hp);
+        assert_eq!(run.player.mana, run.player.max_mana);
+    }
+}

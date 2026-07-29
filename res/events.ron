@@ -1,0 +1,37 @@
+// The event pool. Good and bad outcomes both represented, drawn at random when
+// the player steps on an event node.
+[
+    (
+        name: "Abandoned Shrine",
+        prompt: "A cracked altar hums faintly. Something is still in there.",
+        choices: [
+            (text: "Reach inside",  outcome: GainSpell),
+            (text: "Leave it be",   outcome: Nothing),
+        ],
+    ),
+    (
+        name: "Still Pool",
+        prompt: "Cold, clear water. Your reflection lingers a moment too long.",
+        choices: [
+            (text: "Drink",         outcome: Heal(8)),
+            (text: "Bathe in it",   outcome: RaiseMaxMana(1)),
+            (text: "Walk past",     outcome: Nothing),
+        ],
+    ),
+    (
+        name: "Collapsed Tunnel",
+        prompt: "The way forward is blocked by rubble. You could squeeze through.",
+        choices: [
+            (text: "Squeeze through",   outcome: Damage(4)),
+            (text: "Dig it out slowly", outcome: RaiseMaxHp(3)),
+        ],
+    ),
+    (
+        name: "Sleeping Wyrm",
+        prompt: "Something vast is curled in the dark, breathing slowly. Scales glitter.",
+        choices: [
+            (text: "Steal a scale", outcome: Damage(6)),
+            (text: "Back away",     outcome: Nothing),
+        ],
+    ),
+]
