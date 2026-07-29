@@ -1,6 +1,6 @@
 # Incantation
 
-**[▶ Play it in your browser](https://dankane2029.github.io/tui-game/)** — no install, no download.
+**[▶ Play it in your browser](https://dankane2029.github.io/incantation/)** — no install, no download.
 
 A roguelike spell-battler for the terminal, in Rust. You climb a branching map, and every fight
 is won or lost on how you **combine spells**.
@@ -116,7 +116,7 @@ Same two spells, same mana, different outcome.
 
 ## Playing
 
-In a browser: **[dankane2029.github.io/tui-game](https://dankane2029.github.io/tui-game/)**. The
+In a browser: **[dankane2029.github.io/incantation](https://dankane2029.github.io/incantation/)**. The
 same code, compiled to WebAssembly and drawn into a DOM grid.
 
 In a terminal:

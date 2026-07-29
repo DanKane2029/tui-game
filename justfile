@@ -31,7 +31,7 @@ snap:
 # Record the README demo GIF.
 demo:
     cargo build --release
-    asciinema rec --overwrite -c "./target/release/tui-game" assets/demo.cast
+    asciinema rec --overwrite -c "./target/release/incantation" assets/demo.cast
     agg --cols 100 --rows 30 assets/demo.cast assets/demo.gif
 
 # Everything CI runs, so you can catch failures before pushing.

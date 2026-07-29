@@ -14,11 +14,11 @@ use ratzilla::event::{KeyCode, KeyEvent};
 use ratzilla::ratatui::Terminal;
 use ratzilla::web_sys::console;
 
-use tui_game::action::Action;
-use tui_game::app::App;
-use tui_game::game::content::Content;
-use tui_game::input::Key;
-use tui_game::{input, ui};
+use incantation::action::Action;
+use incantation::app::App;
+use incantation::game::content::Content;
+use incantation::input::Key;
+use incantation::{input, ui};
 
 /// Translate a browser keypress into the platform-neutral [`Key`].
 fn to_key(event: &KeyEvent) -> Option<Key> {

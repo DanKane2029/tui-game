@@ -699,6 +699,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "incantation"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "getrandom 0.4.3",
+ "insta",
+ "itertools 0.15.0",
+ "rand 0.10.2",
+ "ratatui",
+ "ratzilla",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "indenter"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1843,21 +1858,6 @@ dependencies = [
  "sharded-slab",
  "thread_local",
  "tracing-core",
-]
-
-[[package]]
-name = "tui-game"
-version = "0.1.0"
-dependencies = [
- "color-eyre",
- "getrandom 0.4.3",
- "insta",
- "itertools 0.15.0",
- "rand 0.10.2",
- "ratatui",
- "ratzilla",
- "ron",
- "serde",
 ]
 
 [[package]]
