@@ -157,7 +157,7 @@ fn draw_path(canvas: &mut Canvas, from: (isize, isize), to: (isize, isize), ink:
 
 pub fn render(f: &mut Frame, app: &App) {
     let [map_area, status_area] =
-        Layout::vertical([Constraint::Fill(1), Constraint::Length(4)]).areas(f.area());
+        Layout::vertical([Constraint::Fill(1), Constraint::Length(4)]).areas(crate::ui::stage(f));
 
     let available = app.nodes_available();
     let selected = available.get(app.ui.map_cursor).copied();

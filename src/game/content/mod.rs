@@ -4,7 +4,9 @@
 //! directory rather than only from the repository root. Parsing happens once
 //! at startup and returns a `Result` naming the file, instead of panicking.
 
-use color_eyre::eyre::{Context, Result};
+use std::fmt;
+
+use serde::de::DeserializeOwned;
 
 use crate::game::combat::rules::Rules;
 use crate::game::entity::EnemyKind;
@@ -24,13 +26,36 @@ pub struct Content {
     pub events: Vec<MapEvent>,
 }
 
+/// A content file that failed to parse, named so the message is actionable.
+#[derive(Debug)]
+pub struct ContentError {
+    pub file: &'static str,
+    pub source: ron::error::SpannedError,
+}
+
+impl fmt::Display for ContentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.file, self.source)
+    }
+}
+
+impl std::error::Error for ContentError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+fn parse<T: DeserializeOwned>(text: &str, file: &'static str) -> Result<T, ContentError> {
+    ron::from_str(text).map_err(|source| ContentError { file, source })
+}
+
 impl Content {
-    pub fn load() -> Result<Self> {
+    pub fn load() -> Result<Self, ContentError> {
         Ok(Self {
-            spells: ron::from_str(SPELLS).wrap_err("res/spells.ron")?,
-            rules: ron::from_str(RULES).wrap_err("res/rules.ron")?,
-            enemies: ron::from_str(ENEMIES).wrap_err("res/enemies.ron")?,
-            events: ron::from_str(EVENTS).wrap_err("res/events.ron")?,
+            spells: parse(SPELLS, "res/spells.ron")?,
+            rules: parse(RULES, "res/rules.ron")?,
+            enemies: parse(ENEMIES, "res/enemies.ron")?,
+            events: parse(EVENTS, "res/events.ron")?,
         })
     }
 

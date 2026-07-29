@@ -3,17 +3,36 @@ name = "tui-game"
 version = "0.1.0"
 edition = "2024"
 
+# Shared by both builds. Nothing here may pull in a terminal: the browser build
+# has no crossterm, and `game/` has no business knowing about either.
 [dependencies]
-# crossterm is NOT declared directly -- it comes through ratatui::crossterm, so
-# there is only ever one copy of it in the build.
-ratatui = "0.30.2"
-color-eyre = "0.6.5"
+ratatui = { version = "0.30.2", default-features = false, features = ["std", "all-widgets", "layout-cache", "underline-color"] }
 ron = "0.12.2"
 serde = { version = "1.0.219", features = ["derive"] }
 rand = "0.10.2"
+
+# Terminal build. crossterm is NOT declared directly -- it arrives through
+# ratatui's feature, so there is only ever one copy of it.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ratatui = { version = "0.30.2", features = ["crossterm"] }
+color-eyre = "0.6.5"
+
+# Browser build. Ratzilla supplies the ratatui backend, the render loop and the
+# key events. getrandom needs the wasm_js feature: a bare wasm module has no
+# ambient entropy source, so it must be pointed at the browser crypto API.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ratzilla = "0.3.1"
+getrandom = { version = "0.4", features = ["wasm_js"] }
 
 [dev-dependencies]
 # Snapshot-tests frames rendered through ratatui's TestBackend.
 insta = "1.48"
 # Permutations, for proving incantation resolution is order-independent.
 itertools = "0.15"
+
+# Keeps the wasm payload small enough to load quickly over Pages.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

@@ -23,7 +23,7 @@ pub fn render(f: &mut Frame, app: &App) {
         Constraint::Length(7),
         Constraint::Fill(1),
     ])
-    .areas(f.area());
+    .areas(crate::ui::stage(f));
 
     f.render_widget(
         Paragraph::new(

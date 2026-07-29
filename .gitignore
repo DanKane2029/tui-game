@@ -1,5 +1,8 @@
 /target
 
+# Trunk's web bundle output.
+/dist
+
 # Terminal recordings are intermediate; the rendered GIF in assets/ is committed.
 *.cast
 

@@ -1,5 +1,7 @@
 # Incantation
 
+**[▶ Play it in your browser](https://dankane2029.github.io/tui-game/)** — no install, no download.
+
 A roguelike spell-battler for the terminal, in Rust. You climb a branching map, and every fight
 is won or lost on how you **combine spells**.
 
@@ -114,6 +116,11 @@ Same two spells, same mana, different outcome.
 
 ## Playing
 
+In a browser: **[dankane2029.github.io/tui-game](https://dankane2029.github.io/tui-game/)**. The
+same code, compiled to WebAssembly and drawn into a DOM grid.
+
+In a terminal:
+
 ```sh
 cargo run --release
 ```
@@ -159,6 +166,15 @@ The code is split along one boundary: `src/game/` is the pure simulation — no 
 no async, no channels — and everything else is the shell that draws it. That's what lets the
 whole game be tested without a terminal.
 
+It is also what made the browser build cheap. `game/`, `app/` and `ui/` are shared verbatim
+between the two targets; only the shell differs — a blocking crossterm loop in `src/native.rs`,
+a ratzilla render loop in `src/web.rs`. Key handling is shared too: both translate their own
+event type into one `input::Key` and run the same mapping.
+
+```sh
+trunk serve --release      # play the web build locally at localhost:8080
+```
+
 The UI is covered by snapshot tests that render frames through ratatui's `TestBackend` and assert
 on the exact characters drawn, so layout can be changed and reviewed without launching anything.
 
@@ -170,5 +186,7 @@ alternatives were rejected, and [`docs/DESIGN.md`](docs/DESIGN.md) for the game 
 Playable start to finish: a full run, fights, events, shops, rewards and a boss. The content is
 deliberately thin — a handful of spells, enemies and events — because the systems were the goal
 and content is cheap to add on top.
+
+Every merge to `main` rebuilds the WebAssembly bundle and republishes it to GitHub Pages.
 
 Not done yet: an animated demo recording, persistent progression between runs, and relics.

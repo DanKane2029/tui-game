@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Incantation — a roguelike spell-battler in your browser</title>
+    <meta
+      name="description"
+      content="A roguelike spell-battler for the terminal, written in Rust with Ratatui and compiled to WebAssembly."
+    />
+
+    <!-- Tells Trunk to build the Rust binary for wasm and inject the glue. -->
+    <link
+      data-trunk
+      rel="rust"
+      data-wasm-opt="s"
+      data-wasm-opt-params="--enable-bulk-memory --enable-nontrapping-float-to-int"
+    />
+
+    <style>
+      :root {
+        --bg: #16161e;
+        --fg: #c0caf5;
+        --dim: #565f89;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Fira Code",
+          "JetBrains Mono", Menlo, Consolas, monospace;
+      }
+
+      /* Must cover exactly the window. Ratzilla derives its buffer size from
+         the window but allocates its cells from this element's box, so
+         anything that shrinks it -- padding, a sibling paragraph in normal
+         flow -- makes the two disagree and the backend indexes past the end of
+         its own grid. Everything else on the page is therefore overlaid.
+         The game caps and centres its own drawing area, so a large window
+         simply leaves a margin. */
+      #terminal {
+        position: absolute;
+        inset: 0;
+        line-height: 1;
+        white-space: pre;
+        font-variant-ligatures: none;
+        font-size: 15px;
+        outline: none;
+      }
+
+      /* Ratzilla emits one <pre> per row, and <pre> carries a default 1em
+         top and bottom margin -- which more than doubles the row height and
+         pushes the grid well past the bottom of the window. */
+      #terminal pre {
+        margin: 0;
+        padding: 0;
+        line-height: 1;
+        font: inherit;
+      }
+
+      #terminal span {
+        display: inline-block;
+        vertical-align: top;
+      }
+
+      .hint,
+      #loading {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        color: var(--dim);
+        font-size: 13px;
+        text-align: center;
+        max-width: 70ch;
+        pointer-events: none;
+        margin: 0;
+      }
+
+      .hint {
+        bottom: 8px;
+      }
+
+      #loading {
+        top: 50%;
+        font-size: 14px;
+      }
+
+      .hint a {
+        color: var(--dim);
+        pointer-events: auto;
+      }
+
+      @media (max-width: 900px) {
+        #terminal {
+          font-size: 9px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="loading">loading…</div>
+    <div id="terminal"></div>
+
+    <p class="hint">
+      Arrow keys and Enter drive everything. Backspace undoes a spell component.
+      <br />
+      Best on a desktop browser — the game draws a 100&times;30 character grid.
+      <br />
+      <a href="https://github.com/DanKane2029/tui-game">Source on GitHub</a>
+    </p>
+
+    <script>
+      // Ratzilla listens for keydown on the grid element and makes it
+      // focusable, but never focuses it -- so without this the game ignores
+      // every key until you happen to click on it.
+      function focusGrid() {
+        const grid =
+          document.querySelector("#terminal [tabindex]") ||
+          document.getElementById("terminal");
+        if (grid && grid.focus) grid.focus({ preventScroll: true });
+      }
+
+      // The grid only gains its tabindex once the app has attached its key
+      // handler, so retry briefly rather than assuming it is there.
+      function focusWhenReady(attempts) {
+        focusGrid();
+        if (attempts > 0 && !document.querySelector("#terminal [tabindex]")) {
+          setTimeout(() => focusWhenReady(attempts - 1), 100);
+        }
+      }
+
+      window.addEventListener("TrunkApplicationStarted", () => {
+        const loading = document.getElementById("loading");
+        if (loading) loading.remove();
+        focusWhenReady(30);
+      });
+
+      // Clicking anywhere on the page hands focus back to the game.
+      document.addEventListener("click", focusGrid);
+      window.addEventListener("focus", focusGrid);
+    </script>
+  </body>
+</html>

@@ -13,8 +13,31 @@ pub mod title;
 pub mod widgets;
 
 use ratatui::Frame;
+use ratatui::layout::Rect;
 
 use crate::app::{App, Screen};
+
+/// The largest area the game will draw into.
+///
+/// A terminal, or a maximised browser window, can be far bigger than the game
+/// needs. Rather than let panels stretch to absurd proportions, everything is
+/// drawn into a centred area of at most this size.
+pub const MAX_WIDTH: u16 = 110;
+pub const MAX_HEIGHT: u16 = 34;
+
+/// The centred region every screen draws into. Use this instead of
+/// `frame.area()`.
+pub fn stage(frame: &Frame) -> Rect {
+    let area = frame.area();
+    let width = area.width.min(MAX_WIDTH);
+    let height = area.height.min(MAX_HEIGHT);
+    Rect {
+        x: area.x + (area.width - width) / 2,
+        y: area.y + (area.height - height) / 2,
+        width,
+        height,
+    }
+}
 
 pub fn render(f: &mut Frame, app: &App) {
     // A pending replacement is modal: it can be raised from more than one

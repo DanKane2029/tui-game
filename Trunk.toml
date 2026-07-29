@@ -1,0 +1,5 @@
+[build]
+# Pages serves the site from a subpath (/<repo>/), so assets must be
+# referenced relatively rather than from the domain root.
+public_url = "./"
+dist = "dist"

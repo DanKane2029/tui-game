@@ -47,6 +47,6 @@ pub fn render(f: &mut Frame, app: &App) {
         Paragraph::new(lines)
             .centered()
             .block(Block::default().borders(Borders::ALL)),
-        f.area(),
+        crate::ui::stage(f),
     );
 }

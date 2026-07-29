@@ -22,15 +22,16 @@ use crate::ui::widgets::{
 pub fn render(f: &mut Frame, app: &App) {
     let Some(combat) = &app.combat else { return };
 
-    // The enemy and spell rows are fixed height; the log takes whatever is
-    // left, so it grows on a tall terminal instead of leaving dead space.
+    // Spare height goes to the enemy row, which has art to show. The log is
+    // capped: letting it absorb the slack means a very tall terminal -- or a
+    // maximised browser window -- turns the screen into mostly empty log.
     let [enemies_area, log_area, mid_area, spells_area] = Layout::vertical([
-        Constraint::Length(9),
-        Constraint::Fill(1),
+        Constraint::Min(9),
+        Constraint::Max(10),
         Constraint::Length(5),
         Constraint::Length(8),
     ])
-    .areas(f.area());
+    .areas(crate::ui::stage(f));
 
     render_enemies(f, enemies_area, app, combat);
     render_log(f, log_area, app);

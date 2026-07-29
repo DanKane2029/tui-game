@@ -1,6 +1,5 @@
 //! The shell: owns all state, routes actions, and drives the loop.
 
-use color_eyre::eyre::Result;
 use rand::seq::IndexedRandom;
 
 use crate::action::Action;
@@ -199,8 +198,8 @@ impl App {
         }
     }
 
-    pub fn from_content(content: Content) -> Result<Self> {
-        Ok(Self::new(content, rand::random()))
+    pub fn from_content(content: Content) -> Self {
+        Self::new(content, rand::random())
     }
 
     /// True while a result is on screen waiting to be dismissed.
