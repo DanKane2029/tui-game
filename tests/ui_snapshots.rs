@@ -18,7 +18,7 @@ fn app(seed: u64) -> App {
 }
 
 fn frame(app: &App) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(96, 28)).expect("test backend");
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).expect("test backend");
     terminal
         .draw(|f| ui::render(f, app))
         .expect("render succeeds");
@@ -40,7 +40,7 @@ fn map_screen() {
 #[test]
 fn combat_screen_at_the_start_of_a_fight() {
     let mut app = app(7);
-    app.apply(Action::MapEnter);
+    app.apply(Action::Confirm);
     settle(&mut app);
     assert_snapshot!(frame(&app));
 }
@@ -49,7 +49,7 @@ fn combat_screen_at_the_start_of_a_fight() {
 #[test]
 fn incantation_preview_two_embers() {
     let mut app = app(7);
-    app.apply(Action::MapEnter);
+    app.apply(Action::Confirm);
     app.apply(Action::AddComponent(0));
     app.apply(Action::AddComponent(0));
     settle(&mut app);
@@ -61,7 +61,7 @@ fn incantation_preview_two_embers() {
 #[test]
 fn incantation_preview_becomes_firestorm() {
     let mut app = app(7);
-    app.apply(Action::MapEnter);
+    app.apply(Action::Confirm);
     app.apply(Action::AddComponent(0));
     app.apply(Action::AddComponent(0));
     app.apply(Action::AddComponent(2));
@@ -69,13 +69,27 @@ fn incantation_preview_becomes_firestorm() {
     assert_snapshot!(frame(&app));
 }
 
+/// Cast the arrow-driven way: build on the spell row, move up to the action
+/// row, confirm.
 #[test]
 fn combat_after_casting() {
     let mut app = app(7);
-    app.apply(Action::MapEnter);
+    app.apply(Action::Confirm);
     app.apply(Action::AddComponent(0));
     app.apply(Action::AddComponent(0));
-    app.apply(Action::Cast);
+    app.apply(Action::NavUp);
+    app.apply(Action::Confirm);
+    settle(&mut app);
+    assert_snapshot!(frame(&app));
+}
+
+/// Focus on the enemy row, where the arrows pick a target.
+#[test]
+fn combat_with_the_enemy_row_focused() {
+    let mut app = app(7);
+    app.apply(Action::Confirm);
+    app.apply(Action::NavUp);
+    app.apply(Action::NavUp);
     settle(&mut app);
     assert_snapshot!(frame(&app));
 }
@@ -83,7 +97,7 @@ fn combat_after_casting() {
 #[test]
 fn game_over_screen() {
     let mut app = app(7);
-    app.apply(Action::MapEnter);
+    app.apply(Action::Confirm);
     app.run.player.hp = 1;
     for _ in 0..8 {
         app.apply(Action::EndTurn);

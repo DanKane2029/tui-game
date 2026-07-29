@@ -1,5 +1,9 @@
-//! Key mapping. Which action a key produces depends on the active screen, so
-//! the same arrow keys can mean different things without any ambiguity.
+//! Key mapping.
+//!
+//! This layer is screen-agnostic: it turns a keypress into a generic intent
+//! and lets [`crate::app::App`] decide what that means for the focused zone.
+//! Keeping it dumb is what makes "arrows and Enter drive everything" hold
+//! across every screen without special cases here.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
@@ -7,52 +11,39 @@ use crate::action::Action;
 use crate::app::Screen;
 
 pub fn map(key: KeyEvent, screen: Screen, awaiting_dismiss: bool) -> Option<Action> {
-    // Ignore key-release and repeat events; only act on a press.
+    // Only act on presses; ignore releases and repeats.
     if key.kind != KeyEventKind::Press {
         return None;
     }
 
-    // Global keys work everywhere.
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => return Some(Action::Quit),
         KeyCode::Char('r') if screen == Screen::GameOver => return Some(Action::Restart),
         _ => {}
     }
 
+    // While a result is on screen, only dismissing it is possible -- so the
+    // player cannot blunder past an outcome they have not read.
     if awaiting_dismiss {
         return match key.code {
-            KeyCode::Enter | KeyCode::Char(' ') => Some(Action::Continue),
+            KeyCode::Enter | KeyCode::Char(' ') => Some(Action::Confirm),
             _ => None,
         };
     }
 
-    match screen {
-        Screen::Map => match key.code {
-            KeyCode::Left | KeyCode::Up | KeyCode::Char('h') => Some(Action::MapPrev),
-            KeyCode::Right | KeyCode::Down | KeyCode::Char('l') => Some(Action::MapNext),
-            KeyCode::Enter | KeyCode::Char(' ') => Some(Action::MapEnter),
-            _ => None,
-        },
+    match key.code {
+        KeyCode::Left | KeyCode::Char('h') => Some(Action::NavLeft),
+        KeyCode::Right | KeyCode::Char('l') => Some(Action::NavRight),
+        KeyCode::Up | KeyCode::Char('k') => Some(Action::NavUp),
+        KeyCode::Down | KeyCode::Char('j') => Some(Action::NavDown),
+        KeyCode::Enter | KeyCode::Char(' ') => Some(Action::Confirm),
 
-        Screen::Combat => match key.code {
-            KeyCode::Char(c @ '1'..='5') => Some(Action::AddComponent(c as usize - '1' as usize)),
-            KeyCode::Backspace => Some(Action::Undo),
-            KeyCode::Delete | KeyCode::Char('c') => Some(Action::Clear),
-            KeyCode::Up | KeyCode::Left => Some(Action::TargetPrev),
-            KeyCode::Down | KeyCode::Right => Some(Action::TargetNext),
-            KeyCode::Enter => Some(Action::Cast),
-            KeyCode::Tab | KeyCode::Char('e') => Some(Action::EndTurn),
-            _ => None,
-        },
+        KeyCode::Backspace => Some(Action::Undo),
+        KeyCode::Delete | KeyCode::Char('c') => Some(Action::Clear),
+        KeyCode::Tab => Some(Action::EndTurn),
+        KeyCode::Char(c @ '1'..='5') => Some(Action::AddComponent(c as usize - '1' as usize)),
 
-        Screen::Event => match key.code {
-            KeyCode::Up | KeyCode::Left => Some(Action::ChoicePrev),
-            KeyCode::Down | KeyCode::Right => Some(Action::ChoiceNext),
-            KeyCode::Enter | KeyCode::Char(' ') => Some(Action::ChoiceSelect),
-            _ => None,
-        },
-
-        Screen::GameOver => None,
+        _ => None,
     }
 }
 
@@ -75,7 +66,31 @@ mod tests {
     }
 
     #[test]
-    fn number_keys_select_spell_slots_zero_indexed() {
+    fn arrows_and_enter_produce_intents_on_every_screen() {
+        // The whole point: no screen needs its own key vocabulary.
+        for screen in [Screen::Map, Screen::Combat, Screen::Event] {
+            assert_eq!(
+                map(press(KeyCode::Left), screen, false),
+                Some(Action::NavLeft)
+            );
+            assert_eq!(
+                map(press(KeyCode::Right), screen, false),
+                Some(Action::NavRight)
+            );
+            assert_eq!(map(press(KeyCode::Up), screen, false), Some(Action::NavUp));
+            assert_eq!(
+                map(press(KeyCode::Down), screen, false),
+                Some(Action::NavDown)
+            );
+            assert_eq!(
+                map(press(KeyCode::Enter), screen, false),
+                Some(Action::Confirm)
+            );
+        }
+    }
+
+    #[test]
+    fn number_keys_remain_a_shortcut_for_spell_slots() {
         assert_eq!(
             map(press(KeyCode::Char('1')), Screen::Combat, false),
             Some(Action::AddComponent(0))
@@ -84,20 +99,7 @@ mod tests {
             map(press(KeyCode::Char('5')), Screen::Combat, false),
             Some(Action::AddComponent(4))
         );
-        // There is no sixth slot.
         assert_eq!(map(press(KeyCode::Char('6')), Screen::Combat, false), None);
-    }
-
-    #[test]
-    fn the_same_key_means_different_things_per_screen() {
-        assert_eq!(
-            map(press(KeyCode::Enter), Screen::Combat, false),
-            Some(Action::Cast)
-        );
-        assert_eq!(
-            map(press(KeyCode::Enter), Screen::Map, false),
-            Some(Action::MapEnter)
-        );
     }
 
     #[test]
@@ -109,17 +111,13 @@ mod tests {
 
     #[test]
     fn a_pending_result_swallows_everything_except_dismiss_and_quit() {
+        assert_eq!(map(press(KeyCode::Left), Screen::Event, true), None);
         assert_eq!(
-            map(press(KeyCode::Char('1')), Screen::Combat, true),
-            None,
-            "must not act on the fight while a result is on screen"
+            map(press(KeyCode::Enter), Screen::Event, true),
+            Some(Action::Confirm)
         );
         assert_eq!(
-            map(press(KeyCode::Enter), Screen::Combat, true),
-            Some(Action::Continue)
-        );
-        assert_eq!(
-            map(press(KeyCode::Char('q')), Screen::Combat, true),
+            map(press(KeyCode::Char('q')), Screen::Event, true),
             Some(Action::Quit)
         );
     }

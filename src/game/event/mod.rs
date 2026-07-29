@@ -96,12 +96,16 @@ mod tests {
                 mana_cost: 1,
                 element: Element::Flame,
                 power: 3,
+                art: vec![],
+                blurb: String::new(),
             },
             Spell {
                 name: "Douse".into(),
                 mana_cost: 1,
                 element: Element::Water,
                 power: 2,
+                art: vec![],
+                blurb: String::new(),
             },
         ]
     }

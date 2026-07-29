@@ -200,6 +200,8 @@ mod tests {
             mana_cost: cost,
             element,
             power,
+            art: vec![],
+            blurb: String::new(),
         }
     }
 

@@ -1,11 +1,70 @@
 // Component spells. Individually unremarkable on purpose -- what makes them
 // interesting is what they do to the other components in the bag.
+//
+// `art` is 3 lines of at most 7 columns, so five cards fit across an 80-column
+// terminal. `blurb` says what the component contributes to a combination.
 [
-    (name: "Ember", mana_cost: 1, element: Flame, power: 3),
-    (name: "Douse", mana_cost: 1, element: Water, power: 2),
-    (name: "Gust",  mana_cost: 1, element: Gust,  power: 2),
-    (name: "Frost", mana_cost: 2, element: Ice,   power: 4),
-    (name: "Surge", mana_cost: 3, element: Shock, power: 5),
-    (name: "Spore", mana_cost: 2, element: Toxic, power: 3),
-    (name: "Shard", mana_cost: 2, element: Earth, power: 4),
+    (
+        name: "Ember", mana_cost: 1, element: Flame, power: 3,
+        blurb: "Stacks bigger",
+        art: [
+            "   ^   ",
+            "  /^\\  ",
+            " (###) ",
+        ],
+    ),
+    (
+        name: "Douse", mana_cost: 1, element: Water, power: 2,
+        blurb: "Soaks target",
+        art: [
+            "   o   ",
+            "  (~)  ",
+            " (~~~) ",
+        ],
+    ),
+    (
+        name: "Gust", mana_cost: 1, element: Gust, power: 2,
+        blurb: "Spreads to all",
+        art: [
+            "  ~~~  ",
+            " ~~~~~ ",
+            "  ~~~  ",
+        ],
+    ),
+    (
+        name: "Frost", mana_cost: 2, element: Ice, power: 4,
+        blurb: "Freezes at T2",
+        art: [
+            "  \\|/  ",
+            "  -*-  ",
+            "  /|\\  ",
+        ],
+    ),
+    (
+        name: "Surge", mana_cost: 3, element: Shock, power: 5,
+        blurb: "2x vs soaked",
+        art: [
+            "   /|  ",
+            "  /_|  ",
+            "   /   ",
+        ],
+    ),
+    (
+        name: "Spore", mana_cost: 2, element: Toxic, power: 3,
+        blurb: "Poisons",
+        art: [
+            "  .:.  ",
+            " (:::) ",
+            "  ':'  ",
+        ],
+    ),
+    (
+        name: "Shard", mana_cost: 2, element: Earth, power: 4,
+        blurb: "Pierces w/ Ice",
+        art: [
+            "   /\\  ",
+            "  /  \\ ",
+            " /____\\",
+        ],
+    ),
 ]

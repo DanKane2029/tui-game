@@ -152,6 +152,45 @@ mod tests {
         assert!(c.starting_spells().len() <= crate::game::spell::SPELL_SLOTS);
     }
 
+    /// Five spell cards sit side by side, so on an 80-column terminal each has
+    /// 14 usable columns. Anything wider is silently clipped on screen, which
+    /// is the kind of thing nobody notices until a screenshot.
+    #[test]
+    fn spell_art_and_blurbs_fit_a_card_at_eighty_columns() {
+        const USABLE: usize = 14;
+        for spell in content().spells {
+            assert!(
+                spell.blurb.chars().count() <= USABLE,
+                "{}: blurb {:?} is {} cols, over the {USABLE} that fit",
+                spell.name,
+                spell.blurb,
+                spell.blurb.chars().count()
+            );
+            assert!(
+                spell.art.len() <= 3,
+                "{}: art is {} lines; cards have room for 3",
+                spell.name,
+                spell.art.len()
+            );
+            for row in &spell.art {
+                assert!(
+                    row.chars().count() <= USABLE,
+                    "{}: art row {row:?} is {} cols, over the {USABLE} that fit",
+                    spell.name,
+                    row.chars().count()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_spell_has_art_and_a_blurb() {
+        for spell in content().spells {
+            assert!(!spell.art.is_empty(), "{} has no art", spell.name);
+            assert!(!spell.blurb.is_empty(), "{} has no blurb", spell.name);
+        }
+    }
+
     #[test]
     fn the_headline_combination_from_the_design_doc_still_holds() {
         // Ember + Ember + Gust should turn a single-target spell into one that

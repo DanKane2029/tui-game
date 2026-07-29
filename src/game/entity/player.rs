@@ -67,6 +67,8 @@ mod tests {
             mana_cost: cost,
             element: Element::Flame,
             power: 1,
+            art: vec![],
+            blurb: String::new(),
         }
     }
 
